@@ -220,6 +220,28 @@ details.adv > summary{ cursor:pointer; color:var(--primary); font-weight:700; pa
 :root[data-theme="dark"] .dot-susp{ background:#F87171; }
 .n-chip{ font-size:0.7rem; padding:2px 7px; vertical-align:middle; }
 
+.caja{ display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; background:var(--primary); color:#fff; border-radius:var(--radius); padding:16px 18px; margin-bottom:14px; }
+.caja-l{ font-weight:700; font-size:0.9rem; opacity:0.92; }
+.caja-n{ font-family:Manrope,sans-serif; font-weight:800; font-size:2.1rem; line-height:1.1; font-variant-numeric:tabular-nums; }
+.caja-n.neg{ color:#FFD7D2; }
+.caja-s{ font-size:0.82rem; opacity:0.88; }
+.caja .btn{ background:rgba(255,255,255,0.16); border-color:transparent; color:#fff; }
+:root[data-theme="dark"] .caja, :root[data-theme="dark"] .caja .btn{ color:#10141a; }
+:root[data-theme="dark"] .caja .btn{ background:rgba(0,0,0,0.12); }
+.mods{ display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:10px; margin-bottom:14px; }
+@media (max-width:720px){ .mods{ grid-template-columns:repeat(2, minmax(0,1fr)); } }
+.mod{ display:flex; flex-direction:column; align-items:flex-start; gap:2px; text-align:left; background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:12px 14px; cursor:pointer; color:var(--text); min-width:0; }
+.mod:hover{ border-color:var(--primary-line); background:var(--primary-light); }
+.mod-ico{ font-size:1.35rem; }
+.mod-t{ font-weight:800; font-family:Manrope,sans-serif; }
+.mod-s{ font-size:0.8rem; color:var(--dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%; }
+.bar-col{ width:28%; min-width:80px; }
+.bars{ display:flex; flex-direction:column; gap:3px; }
+.bars span{ display:block; height:6px; border-radius:3px; min-width:2px; }
+.b-ok{ background:var(--ok); } .b-bad{ background:var(--bad); }
+@media (max-width:520px){ .bar-col{ display:none; } }
+@media (max-width:520px){ table.mtab th, table.mtab td{ padding:7px 6px; font-size:0.84rem; } }
+
 </style>
 </head>
 <body>
@@ -233,7 +255,9 @@ details.adv > summary{ cursor:pointer; color:var(--primary); font-weight:700; pa
     <button type="button" data-tab="socios">👥 Socios</button>
     <button type="button" data-tab="pagos">💵 Pagos</button>
     <button type="button" data-tab="planes">🤝 Planes de pago</button>
-    <button type="button" data-tab="cuotas">📅 Cuotas</button>
+    <button type="button" data-tab="cuotas">📅 Cobros</button>
+    <button type="button" data-tab="gastos">🧾 Gastos</button>
+    <button type="button" data-tab="ingresos">📈 Ingresos</button>
     <button type="button" data-tab="portal">🪪 Portal</button>
     <button type="button" data-tab="ajustes">⚙️ Ajustes</button>
   </nav>
@@ -301,7 +325,7 @@ function rutValido(r){
 /* ---------- Estado ----------
    Cada registro lleva id, u (última modificación, ms) y del (borrado lógico).
    Así los cambios de varios dirigentes se combinan registro por registro sin pisarse. */
-const COLS = ['tarifas', 'socios', 'pagos', 'cobros', 'ajustes', 'planes', 'autoriz', 'acuerdos', 'nominas'];
+const COLS = ['tarifas', 'socios', 'pagos', 'cobros', 'ajustes', 'planes', 'autoriz', 'acuerdos', 'nominas', 'gastos', 'ingresos'];
 const MEDIOS = ['Efectivo', 'Transferencia', 'Descuento por planilla', 'Depósito', 'Otro'];
 function emptyState(){
   return { v: 1, config: { nombre: '', diaVencimiento: 10, mesInicioDefault: curYm(), portalAuto: true, u: 0 }, tarifas: [], socios: [], pagos: [], cobros: [], ajustes: [] };
@@ -2088,6 +2112,193 @@ ACT['ac-todos'] = ()=>{
 };
 
 /* =====================================================================
+   FINANZAS: Gastos, Ingresos (cuotas + otras actividades) y el resumen
+   mensual de recaudado y adeudado en Inicio.
+   ===================================================================== */
+const CAT_GASTO = ['Celebraciones y actividades', 'Materiales y oficina', 'Trámites y legales', 'Ayudas a socios', 'Alimentación', 'Transporte', 'Otro'];
+const CAT_INGRESO = ['Actividad (rifa, venta, evento)', 'Donación o aporte', 'Saldo inicial / traspaso', 'Intereses', 'Otro'];
+ui.finAnio = ui.finAnio || String(new Date().getFullYear());
+
+/* ---------- Cálculos por mes ---------- */
+function ingresosCuotasMes(ym){
+  let cuotas = 0, extras = 0;
+  live('pagos').forEach(p=>{
+    if((p.fecha || '').slice(0, 7) !== ym) return;
+    const m = Number(p.monto) || 0;
+    if(p.imp === 'extra') extras += m; else cuotas += m;
+  });
+  return { cuotas, extras, total: cuotas + extras };
+}
+function otrosIngresosMes(ym){ return live('ingresos').filter(x=> (x.fecha || '').slice(0, 7) === ym).reduce((a, x)=> a + (Number(x.monto) || 0), 0); }
+function gastosMes(ym){ return live('gastos').filter(x=> (x.fecha || '').slice(0, 7) === ym).reduce((a, x)=> a + (Number(x.monto) || 0), 0); }
+function deudaPorMes(){
+  // adeudado: lo que falta pagar de lo cobrado en cada mes (cuotas, cuotas extraordinarias y cargos), ya vencido
+  const out = {};
+  live('socios').forEach(s=> cuentaSocio(s).items.forEach(it=>{
+    if(!it.vencido || it.monto <= 0) return;
+    const o = out[it.mes] || (out[it.mes] = { cobrado: 0, pendiente: 0 });
+    o.cobrado += it.monto; o.pendiente += it.monto - (it.pagado || 0);
+  }));
+  return out;
+}
+function mesesRango(){
+  const ids = [];
+  live('pagos').forEach(p=> p.fecha && ids.push(ymToIdx(p.fecha.slice(0, 7))));
+  live('gastos').forEach(p=> p.fecha && ids.push(ymToIdx(p.fecha.slice(0, 7))));
+  live('ingresos').forEach(p=> p.fecha && ids.push(ymToIdx(p.fecha.slice(0, 7))));
+  live('socios').forEach(s=> ids.push(ymToIdx(socioInicio(s))));
+  const cur = ymToIdx(curYm());
+  const min = ids.filter(x=> !isNaN(x)).reduce((a, b)=> Math.min(a, b), cur);
+  const out = []; for(let i = cur; i >= min; i--) out.push(idxToYm(i));
+  return out;
+}
+
+/* ---------- Inicio: módulos + resumen mensual ---------- */
+const MODULOS = [
+  ['socios', '👥', 'Socios', ()=> `${live('socios').filter(s=> !socioBaja(s)).length} activos`],
+  ['pagos', '💵', 'Pagos', ()=> `${clp(ingresosCuotasMes(curYm()).total)} este mes`],
+  ['planes', '🤝', 'Planes de pago', ()=>{ const n = live('planes').filter(p=> !p.anulado && !planResumen(p).terminado).length; return n + ' activo' + (n === 1 ? '' : 's'); }],
+  ['cuotas', '📅', 'Cobros', ()=> `Cuota ${clp(tarifaActual())}`],
+  ['gastos', '🧾', 'Gastos', ()=> `${clp(gastosMes(curYm()))} este mes`],
+  ['ingresos', '📈', 'Ingresos', ()=>{ const m = curYm(); return clp(ingresosCuotasMes(m).total + otrosIngresosMes(m)) + ' este mes'; }],
+  ['portal', '🪪', 'Portal', ()=> 'Tarjetas QR'],
+  ['ajustes', '⚙️', 'Ajustes', ()=> connected() || (typeof gdEnabled === 'function' && gdEnabled()) ? 'Sincronizado' : 'Solo este equipo'],
+];
+function modulosHtml(){
+  return `<div class="mods">${MODULOS.map(([t, ico, n, sub])=> `<button type="button" class="mod" data-act="go" data-tab="${t}"><span class="mod-ico">${ico}</span><span class="mod-t">${n}</span><span class="mod-s">${esc(sub())}</span></button>`).join('')}</div>`;
+}
+function cajaTotal(){
+  const ing = live('pagos').reduce((t, p)=> t + (Number(p.monto) || 0), 0) + live('ingresos').reduce((t, x)=> t + (Number(x.monto) || 0), 0);
+  const gas = live('gastos').reduce((t, x)=> t + (Number(x.monto) || 0), 0);
+  return { ing, gas, saldo: ing - gas };
+}
+function cajaHtml(){
+  const c = cajaTotal();
+  return `<div class="caja"><div><div class="caja-l">💰 En posesión del sindicato</div><div class="caja-n ${c.saldo < 0 ? 'neg' : ''}">${clp(c.saldo)}</div>
+    <div class="caja-s">Ingresos ${clp(c.ing)} − gastos ${clp(c.gas)}</div></div>
+    <div class="btn-row"><button class="btn sm" data-act="go" data-tab="ingresos">📈 Ingresos</button><button class="btn sm" data-act="go" data-tab="gastos">🧾 Gastos</button></div></div>`;
+}
+function resumenMensualHtml(n){
+  const deu = deudaPorMes();
+  const meses = mesesRango().slice(0, n || 12);
+  const filas = meses.map(ym=>{ const r = ingresosCuotasMes(ym), o = otrosIngresosMes(ym), d = deu[ym] || { cobrado: 0, pendiente: 0 }; return { ym, rec: r.total + o, pendiente: d.pendiente }; });
+  const T = filas.reduce((a, f)=> ({ rec: a.rec + f.rec, pen: a.pen + f.pendiente }), { rec: 0, pen: 0 });
+  const max = Math.max(1, ...filas.map(f=> Math.max(f.rec, f.pendiente)));
+  return `<div class="card"><div class="card-head"><h2>Balance mensual: recaudado y adeudado</h2><button class="btn ghost" data-act="go" data-tab="ingresos">Ver ingresos</button></div>
+    <div class="table-wrap"><table class="t mtab"><thead><tr><th>Mes</th><th class="r">Recaudado</th><th class="r">Adeudado</th><th class="r">Balance</th><th class="bar-col"></th></tr></thead><tbody>
+    ${filas.map(f=>{ const b = f.rec - f.pendiente; return `<tr><td style="white-space:nowrap">${esc(mesLabel(f.ym, true))}</td><td class="r val ok">${clp(f.rec)}</td><td class="r ${f.pendiente ? 'val bad' : 'dim'}">${clp(f.pendiente)}</td><td class="r val ${b < 0 ? 'bad' : 'ok'}">${clp(b)}</td>
+      <td class="bar-col"><div class="bars"><span class="b-ok" style="width:${Math.round(f.rec / max * 100)}%"></span><span class="b-bad" style="width:${Math.round(f.pendiente / max * 100)}%"></span></div></td></tr>`; }).join('')}
+    <tr><td><b>Total</b></td><td class="r"><b>${clp(T.rec)}</b></td><td class="r"><b>${clp(T.pen)}</b></td><td class="r val ${T.rec - T.pen < 0 ? 'bad' : 'ok'}"><b>${clp(T.rec - T.pen)}</b></td><td></td></tr>
+    </tbody></table></div>
+    <p class="dim tiny" style="margin-top:6px"><b>Recaudado:</b> dinero que entró ese mes (pagos de socios y otros ingresos). <b>Adeudado:</b> lo que falta pagar de lo que se cobró ese mes. <b>Balance:</b> recaudado menos adeudado.</p></div>`;
+}
+const _viewInicio = VIEWS.inicio;
+VIEWS.inicio = function(){
+  const h = _viewInicio();
+  if(h.indexOf('class="card welcome"') >= 0) return h;
+  const qi = h.indexOf('<div class="quick">');
+  const ci = h.indexOf('<div class="card">');
+  if(qi < 0 || ci < 0) return h;
+  return cajaHtml() + h.slice(0, qi) + modulosHtml() + h.slice(qi, ci) + resumenMensualHtml(12) + h.slice(ci);
+};
+
+/* ---------- Gastos e Ingresos (misma interfaz) ---------- */
+function movimientosView(col){
+  const esG = col === 'gastos';
+  const anio = ui.finAnio;
+  const all = live(col).filter(x=> (x.fecha || '').slice(0, 4) === anio).sort((a, b)=> (b.fecha || '').localeCompare(a.fecha || '') || b.u - a.u);
+  const anios = new Set([String(new Date().getFullYear())]);
+  live(col).concat(live('pagos')).forEach(x=> x.fecha && anios.add(x.fecha.slice(0, 4)));
+  const porMes = {};
+  all.forEach(x=>{ const m = x.fecha.slice(0, 7); (porMes[m] = porMes[m] || []).push(x); });
+  const total = all.reduce((a, x)=> a + (Number(x.monto) || 0), 0);
+  const cats = esG ? CAT_GASTO : CAT_INGRESO;
+  const resumenCat = {};
+  all.forEach(x=> resumenCat[x.categoria || 'Otro'] = (resumenCat[x.categoria || 'Otro'] || 0) + (Number(x.monto) || 0));
+  const yearSel = `<select id="mvAnio">${Array.from(anios).sort().reverse().map(a=> `<option ${a === anio ? 'selected' : ''}>${a}</option>`).join('')}</select>`;
+  let cuotasHtml = '';
+  if(!esG){
+    // ingresos por cuotas, mes a mes
+    const filas = [];
+    for(let m = 12; m >= 1; m--){
+      const ym = anio + '-' + pad2(m); if(ymToIdx(ym) > ymToIdx(curYm())) continue;
+      const r = ingresosCuotasMes(ym), o = otrosIngresosMes(ym), g = gastosMes(ym);
+      if(r.total || o || g) filas.push({ ym, r, o, g });
+    }
+    const T = filas.reduce((a, f)=> ({ c: a.c + f.r.cuotas, e: a.e + f.r.extras, o: a.o + f.o, g: a.g + f.g }), { c: 0, e: 0, o: 0, g: 0 });
+    cuotasHtml = `<div class="card"><h2>Ingresos ${esc(anio)} por mes</h2>
+      <div class="table-wrap"><table class="t"><thead><tr><th>Mes</th><th class="r">Cuotas sindicales</th><th class="r">Extraord. e incorp.</th><th class="r">Otras actividades</th><th class="r">Total ingresos</th><th class="r">Gastos</th><th class="r">Balance</th></tr></thead><tbody>
+      ${filas.map(f=>{ const ti = f.r.total + f.o, b = ti - f.g; return `<tr><td style="white-space:nowrap">${esc(mesLabel(f.ym, true))}</td><td class="r">${clp(f.r.cuotas)}</td><td class="r">${clp(f.r.extras)}</td><td class="r">${clp(f.o)}</td><td class="r"><b>${clp(ti)}</b></td><td class="r">${clp(f.g)}</td><td class="r val ${b < 0 ? 'bad' : 'ok'}">${clp(b)}</td></tr>`; }).join('') || '<tr><td colspan="7" class="empty">Sin movimientos este año.</td></tr>'}
+      ${filas.length ? `<tr><td><b>Total ${esc(anio)}</b></td><td class="r"><b>${clp(T.c)}</b></td><td class="r"><b>${clp(T.e)}</b></td><td class="r"><b>${clp(T.o)}</b></td><td class="r"><b>${clp(T.c + T.e + T.o)}</b></td><td class="r"><b>${clp(T.g)}</b></td><td class="r val ${T.c + T.e + T.o - T.g < 0 ? 'bad' : 'ok'}"><b>${clp(T.c + T.e + T.o - T.g)}</b></td></tr>` : ''}
+      </tbody></table></div>
+      <p class="dim tiny" style="margin-top:6px">Las cuotas salen solas de los pagos registrados (por fecha de pago). Aquí abajo registras los ingresos por otras actividades.</p></div>`;
+  }
+  return `${cuotasHtml}<div class="card">
+    <div class="card-head"><h2>${esG ? 'Gastos' : 'Otros ingresos'} ${esc(anio)}</h2><div class="btn-row">${yearSel}<button class="btn primary sm" data-act="mv-nuevo" data-col="${col}">+ ${esG ? 'Nuevo gasto' : 'Nuevo ingreso'}</button></div></div>
+    <div class="note">Total ${esc(anio)}: <b>${clp(total)}</b>${Object.keys(resumenCat).length ? ' · ' + Object.entries(resumenCat).sort((a, b)=> b[1] - a[1]).map(([k, v])=> esc(k) + ': ' + clp(v)).join(' · ') : ''}</div>
+    ${Object.keys(porMes).length ? Object.keys(porMes).sort().reverse().map(m=> `<h3>${esc(mesLabelCap(m))} · ${clp(porMes[m].reduce((a, x)=> a + (Number(x.monto) || 0), 0))}</h3>
+      ${porMes[m].map(x=> `<div class="row click" data-act="mv-editar" data-col="${col}" data-id="${x.id}"><div class="main"><div class="title">${esc(x.item)}</div><div class="sub">${fdate(x.fecha)}${x.categoria ? ' · ' + esc(x.categoria) : ''}${x.responsable ? ' · ' + esc(x.responsable) : ''}${x.detalle ? ' · ' + esc(x.detalle) : ''}</div></div><div class="val ${esG ? 'bad' : 'ok'}">${clp(x.monto)}</div></div>`).join('')}`).join('') : `<div class="empty">No hay ${esG ? 'gastos' : 'otros ingresos'} registrados en ${esc(anio)}.</div>`}
+    <div class="btn-row" style="margin-top:12px"><button class="btn sm" data-act="mv-excel" data-col="${col}">📊 Exportar ${esc(anio)} a Excel</button></div>
+  </div>`;
+}
+VIEWS.gastos = ()=> movimientosView('gastos');
+VIEWS.ingresos = ()=> movimientosView('ingresos');
+const mvMount = v=>{ const s = $('#mvAnio', v); if(s) s.onchange = ()=>{ ui.finAnio = s.value; renderView(); }; };
+VIEWS.gastos.mount = mvMount; VIEWS.ingresos.mount = mvMount;
+
+function openMovimiento(col, id){
+  const esG = col === 'gastos';
+  const x = id ? Object.assign({}, getById(col, id)) : { id: uid(), fecha: todayISO(), item: '', monto: 0, categoria: '', responsable: lsGet('cs_yo', ''), detalle: '' };
+  const cats = esG ? CAT_GASTO : CAT_INGRESO;
+  openModal({
+    title: ()=> (id ? 'Editar ' : 'Nuevo ') + (esG ? 'gasto' : 'ingreso'),
+    body: ()=> `<div class="grid2">
+      <label class="f">Fecha<input id="mvF" type="date" value="${esc(x.fecha)}"></label>
+      <label class="f">Monto ($)<input id="mvM" inputmode="numeric" value="${x.monto ? miles(x.monto) : ''}"></label>
+      <label class="f span2">${esG ? 'Ítem (qué se compró o pagó)' : 'Concepto'}<input id="mvI" value="${esc(x.item)}" placeholder="${esG ? 'Ej: Torta día del profesor' : 'Ej: Rifa de fiestas patrias'}"></label>
+      <label class="f">Categoría<select id="mvC"><option value="">—</option>${cats.map(c=> `<option ${c === x.categoria ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label>
+      <label class="f">${esG ? 'Responsable' : 'Recibido por'}<input id="mvR" value="${esc(x.responsable || '')}"></label>
+      <label class="f span2">Detalle, lugar u observación<input id="mvD" value="${esc(x.detalle || '')}" placeholder="${esG ? 'Ej: Pastelería del centro, boleta 1234' : ''}"></label></div>`,
+    foot: ()=> `${id ? '<button class="btn danger" id="mvDel">Eliminar</button><span style="flex:1"></span>' : ''}<button class="btn" data-act="close-modal">Cancelar</button>${id ? '' : '<button class="btn" id="mvOtro">Guardar y otro</button>'}<button class="btn primary" id="mvOk">Guardar</button>`,
+    onMount: (el)=>{
+      $('#mvI', el).focus();
+      const mi = $('#mvM', el); mi.onblur = ()=>{ const n = parseMonto(mi.value); mi.value = n ? miles(n) : ''; };
+      const save = otro=>{
+        const rec = Object.assign(x, { fecha: $('#mvF', el).value, monto: parseMonto($('#mvM', el).value), item: $('#mvI', el).value.trim(), categoria: $('#mvC', el).value, responsable: $('#mvR', el).value.trim(), detalle: $('#mvD', el).value.trim(), por: yo() });
+        if(!rec.fecha || !rec.item || rec.monto <= 0){ toast('Completa fecha, ítem y monto.', 'bad'); return; }
+        ui.finAnio = rec.fecha.slice(0, 4);
+        upsert(col, Object.assign({}, rec));
+        toast('✓ Guardado', 'ok');
+        if(otro){ closeModal(); openMovimiento(col, null); } else closeModal();
+      };
+      $('#mvOk', el).onclick = ()=> save(false);
+      const o = $('#mvOtro', el); if(o) o.onclick = ()=> save(true);
+      const d = $('#mvDel', el); if(d) d.onclick = async ()=>{ if(!await confirmar('¿Eliminar este registro?', 'Eliminar', true)) return; closeModal(); removeRec(col, id); };
+    },
+  });
+}
+ACT['mv-nuevo'] = el=> openMovimiento(el.dataset.col, null);
+ACT['mv-editar'] = el=> openMovimiento(el.dataset.col, el.dataset.id);
+ACT['mv-excel'] = async el=>{
+  const col = el.dataset.col, anio = ui.finAnio;
+  try{
+    const XLSX = await loadXLSX();
+    const wb = XLSX.utils.book_new();
+    const rows = live(col).filter(x=> (x.fecha || '').slice(0, 4) === anio).sort((a, b)=> (a.fecha || '').localeCompare(b.fecha || '')).map(x=> ({ 'Fecha': fdate(x.fecha), 'Ítem': x.item, 'Categoría': x.categoria || '', 'Monto': Number(x.monto) || 0, 'Responsable': x.responsable || '', 'Detalle': x.detalle || '' }));
+    const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ 'Fecha': '', 'Ítem': '', 'Monto': '' }]);
+    ws['!cols'] = [{ wch: 11 }, { wch: 34 }, { wch: 24 }, { wch: 11 }, { wch: 18 }, { wch: 34 }];
+    XLSX.utils.book_append_sheet(wb, ws, col === 'gastos' ? 'Gastos' : 'Otros ingresos');
+    if(col === 'ingresos' || col === 'gastos'){
+      const bal = [];
+      for(let m = 1; m <= 12; m++){ const ym = anio + '-' + pad2(m); const r = ingresosCuotasMes(ym), o = otrosIngresosMes(ym), g = gastosMes(ym); bal.push({ 'Mes': mesLabelCap(ym), 'Cuotas sindicales': r.cuotas, 'Extraordinarias e incorporación': r.extras, 'Otras actividades': o, 'Total ingresos': r.total + o, 'Gastos': g, 'Balance': r.total + o - g }); }
+      const wb2 = XLSX.utils.json_to_sheet(bal); wb2['!cols'] = [{ wch: 16 }, { wch: 16 }, { wch: 18 }, { wch: 16 }, { wch: 14 }, { wch: 12 }, { wch: 12 }];
+      XLSX.utils.book_append_sheet(wb, wb2, 'Balance ' + anio);
+    }
+    XLSX.writeFile(wb, `${col}-${anio}.xlsx`);
+  }catch(e){ toast('⚠ ' + (e.message || e), 'bad'); }
+};
+
+/* =====================================================================
    VISTA: PAGOS
    ===================================================================== */
 VIEWS.pagos = function(){
@@ -2169,8 +2380,8 @@ VIEWS.cuotas = function(){
     <button class="btn" data-act="guardar-venc">Guardar</button>
   </div>
   <div class="card">
-    <div class="card-head"><h2>Cobros extraordinarios</h2><button class="btn primary sm" data-act="nuevo-cobro">+ Nuevo cobro</button></div>
-    <p class="dim small">Ej: aporte para un evento, cuota extraordinaria acordada en asamblea. Se suma a la deuda de los socios indicados.</p>
+    <div class="card-head"><h2>Cuotas extraordinarias</h2><button class="btn primary sm" data-act="nuevo-cobro">+ Nueva cuota extraordinaria</button></div>
+    <p class="dim small">Cuotas extraordinarias votadas en asamblea (ej: aporte para un evento). Se suman a la deuda de los socios indicados.</p>
     ${cobros.length ? cobros.map(c=>{
       const n = c.socios === 'todos' ? live('socios').filter(s=> { const i = ymToIdx(c.mes); return ymToIdx(socioInicio(s)) <= i && (!s.mesTermino || ymToIdx(s.mesTermino) >= i); }).length : (c.socios || []).length;
       let pagados = 0; live('socios').forEach(s=>{ const it = cuentaSocio(s, ymToIdx(c.mes)).items.find(x=> x.ref === c.id); if(it && it.estado === 'pagado') pagados++; });
