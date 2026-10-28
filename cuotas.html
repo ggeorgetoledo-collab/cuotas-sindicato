@@ -406,13 +406,26 @@ function cuentaSocio(s, hastaIdx){
   const totalPagos = pagos.reduce((a, p)=> a + (Number(p.monto) || 0), 0);
   const totalDesc = descuentos.reduce((a, d)=> a + (Number(d.monto) || 0), 0);
   const creditos = totalPagos + totalDesc;
-  let rem = creditos;
+  // 1) Pagos asignados a un mes (p.mes): cubren primero la cuota de ese mes (o sus cobros si p.imp === 'extra').
+  // 2) El resto de los pagos y descuentos se imputa a lo más antiguo.
+  items.forEach(it=>{ it.pagado = 0; });
+  let rem = totalDesc;
+  pagos.forEach(p=>{
+    let m = Number(p.monto) || 0;
+    if(p.mes){
+      const delMes = items.filter(it=> it.mes === p.mes && it.monto > 0);
+      const orden = p.imp === 'extra' ? delMes.filter(it=> it.tipo === 'cargo').concat(delMes.filter(it=> it.tipo === 'cobro'), delMes.filter(it=> it.tipo === 'cuota')) : delMes.filter(it=> it.tipo === 'cuota').concat(delMes.filter(it=> it.tipo !== 'cuota'));
+      orden.forEach(it=>{ const a = Math.min(m, it.monto - it.pagado); if(a > 0){ it.pagado += a; m -= a; } });
+    }
+    rem += m;
+  });
   let totalVencido = 0, deuda = 0;
   const mesesAdeudados = [];
   items.forEach(it=>{
     it.vencido = it.idx <= due;
     if(it.monto <= 0){ it.pagado = 0; it.estado = 'exento'; return; }
-    const p = Math.min(rem, it.monto); rem -= p;
+    const a = Math.min(rem, it.monto - it.pagado); rem -= a;
+    const p = it.pagado + a;
     it.pagado = p;
     it.estado = p >= it.monto ? 'pagado' : (p > 0 ? 'parcial' : 'pendiente');
     if(it.vencido){
@@ -458,12 +471,13 @@ function estadoMeses(s, year){
 /* Qué cubriría un pago nuevo de cierto monto (vista previa antes de guardar) */
 function previewPago(s, monto){
   const base = cuentaSocio(s, ymToIdx(curYm()) + 24);
-  let rem = Math.max(0, base.creditos) + monto, covered = [], partial = null;
+  let rem = monto, covered = [], partial = null;
   for(const it of base.items){
-    if(it.monto <= 0) continue;
+    if(it.monto <= 0 || it.pagado >= it.monto) continue;
     if(rem <= 0) break;
-    const pAntes = it.pagado, p = Math.min(rem, it.monto); rem -= p;
-    if(p > pAntes){ if(p >= it.monto) covered.push(it); else partial = { it, p }; }
+    const a = Math.min(rem, it.monto - it.pagado); rem -= a;
+    const p = it.pagado + a;
+    if(p >= it.monto) covered.push(it); else partial = { it, p };
   }
   return { covered, partial, sobrante: Math.max(0, rem) };
 }
@@ -1351,7 +1365,7 @@ function openPagoMasivo(){
         const t = now(); let n = 0, total = 0;
         st.sel.forEach(id=>{
           const monto = st.montos[id] != null ? st.montos[id] : tarifaDe(st.mes);
-          if(monto > 0){ S.pagos.push({ id: uid(), socioId: id, monto, fecha: st.fecha, medio: st.medio, obs: 'Cuota ' + mesLabel(st.mes), por: yo(), creado: t, u: t }); n++; total += monto; }
+          if(monto > 0){ S.pagos.push({ id: uid(), socioId: id, monto, fecha: st.fecha, medio: st.medio, obs: 'Cuota ' + mesLabel(st.mes), mes: st.mes, imp: 'cuota', por: yo(), creado: t, u: t }); n++; total += monto; }
         });
         lsSet('cs_ultimo_medio', st.medio);
         closeModal();
@@ -1565,7 +1579,7 @@ function setPlanEstado(p, mes, estado, quiet){
   rec.estado = estado; rec.por = yo(); rec.u = now(); rec.del = false;
   if(estado === 'descontado'){
     if(!rec.pagoId || !S.pagos.some(x=> x.id === rec.pagoId && !x.del)){
-      const pago = { id: uid(), socioId: p.socioId, monto: m.total, fecha: ui.planFecha || todayISO(), medio: 'Descuento por planilla', obs: `Plan de pago: cuota ${m.k} de ${p.cuotas}${m.cuota ? ' + cuota ' + mesLabel(mes) : ''}`, por: yo(), creado: now(), u: now(), planId: p.id };
+      const pago = { id: uid(), socioId: p.socioId, monto: m.total, fecha: ui.planFecha || todayISO(), medio: 'Descuento por planilla', obs: `Plan de pago: cuota ${m.k} de ${p.cuotas}${m.cuota ? ' + cuota ' + mesLabel(mes) : ''}`, por: yo(), creado: now(), u: now(), planId: p.id, mes, imp: 'cuota' };
       S.pagos.push(pago); rec.pagoId = pago.id;
     }
     rec.monto = m.total; rec.abono = m.abono;
