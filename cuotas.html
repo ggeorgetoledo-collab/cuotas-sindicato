@@ -214,6 +214,11 @@ details.adv > summary{ cursor:pointer; color:var(--primary); font-weight:700; pa
   .p-break{ break-after:page; }
   h1.p{ font-size:14pt; margin:0 0 2mm; } h2.p{ font-size:12pt; margin:5mm 0 2mm; }
 }
+.n-baja{ color:var(--dim); text-decoration:line-through; text-decoration-thickness:1.5px; font-weight:600; }
+.n-susp{ display:inline-flex; align-items:center; gap:6px; }
+.dot-susp{ width:9px; height:9px; border-radius:50%; background:#D92D20; flex:none; display:inline-block; }
+:root[data-theme="dark"] .dot-susp{ background:#F87171; }
+.n-chip{ font-size:0.7rem; padding:2px 7px; vertical-align:middle; }
 
 </style>
 </head>
@@ -370,6 +375,17 @@ function diaVenc(){ const d = Number(S.config.diaVencimiento); return d >= 1 && 
 function dueIdx(){ const d = new Date(); const cur = ymToIdx(curYm()); return d.getDate() >= diaVenc() ? cur : cur - 1; }
 function itemClave(it){ return it.tipo + '|' + it.mes + '|' + (it.ref || ''); }
 function socioInicio(s){ return s.mesInicio || S.config.mesInicioDefault || curYm(); }
+function suspEn(s, i){ if(!s.suspDesde) return false; const a = ymToIdx(s.suspDesde), b = s.suspHasta ? ymToIdx(s.suspHasta) : Infinity; return i >= a && i <= b; }
+function socioSuspendido(s){ return suspEn(s, ymToIdx(curYm())); }
+function socioBaja(s){ return !!s.mesTermino; }
+/* Nombre con su estado: dados de baja en gris tachado; suspendidos con punto rojo */
+function nombreHtml(s, opts){
+  if(!s) return '<span class="dim">(eliminado)</span>';
+  const n = esc(s.nombre);
+  if(socioBaja(s)) return `<span class="n-baja" title="Dado de baja (último mes: ${esc(mesLabel(s.mesTermino))})">${n}</span>`;
+  if(socioSuspendido(s)) return `<span class="n-susp" title="Suspendido">${n}<span class="dot-susp" aria-label="Suspendido"></span></span>${opts && opts.chip === false ? '' : ' <span class="chip bad n-chip">Suspendido</span>'}`;
+  return n;
+}
 function socioActivo(s){ return !s.mesTermino || ymToIdx(s.mesTermino) >= ymToIdx(curYm()); }
 function cobroAplica(c, s){
   if(c.socios === 'todos') return true;
@@ -388,6 +404,7 @@ function cuentaSocio(s, hastaIdx){
   const items = [];
   for(let i = start; i <= end; i++){
     const ym = idxToYm(i);
+    if(suspEn(s, i)){ items.push({ tipo: 'exento', mes: ym, idx: i, monto: 0, concepto: 'Cuota ' + mesLabel(ym) + ' (suspendido)', motivo: 'Suspendido', susp: true }); continue; }
     if(exentos.has(ym)){ items.push({ tipo: 'exento', mes: ym, idx: i, monto: 0, concepto: 'Cuota ' + mesLabel(ym) + ' (exenta)', motivo: exentos.get(ym).concepto || '' }); continue; }
     const m = tarifaDe(ym);
     if(m > 0) items.push({ tipo: 'cuota', mes: ym, idx: i, monto: m, concepto: 'Cuota ' + mesLabel(ym) });
@@ -395,7 +412,7 @@ function cuentaSocio(s, hastaIdx){
   live('cobros').forEach(c=>{
     const i = ymToIdx(c.mes);
     if(isNaN(i) || i < start || i > endSocio || i > until) return;
-    if(!cobroAplica(c, s)) return;
+    if(!cobroAplica(c, s) || suspEn(s, i)) return;
     items.push({ tipo: 'cobro', mes: c.mes, idx: i, monto: Number(c.monto) || 0, concepto: c.concepto || 'Cobro extraordinario', ref: c.id });
   });
   aj.filter(a=> a.tipo === 'cargo').forEach(a=>{
@@ -467,7 +484,7 @@ function estadoMeses(s, year){
     let st, txt = '';
     if(i < start || i > endSocio){ st = 'nosocio'; txt = '—'; }
     else if(!it){ st = 'exento'; txt = 'Sin cuota'; }
-    else if(it.tipo === 'exento'){ st = 'exento'; txt = 'Exento'; }
+    else if(it.tipo === 'exento'){ st = 'exento'; txt = it.susp ? 'Suspendido' : 'Exento'; }
     else if(it.condonado){ st = 'exento'; txt = 'Condonada'; }
     else if(it.estado === 'pagado'){ st = i > due ? 'adelantado' : 'pagado'; txt = i > due ? 'Adelantado' : 'Pagado'; }
     else if(i > due){ st = 'porvencer'; txt = it.estado === 'parcial' ? 'Abono ' + clp(it.pagado) : 'Por vencer'; }
@@ -949,7 +966,7 @@ VIEWS.inicio = function(){
     <div class="card-head"><h2>Socios con deuda</h2>${deudores.length > 8 ? `<button class="btn ghost" data-act="ver-deudores">Ver todos (${deudores.length})</button>` : ''}</div>
     ${deudores.length ? deudores.slice(0, 8).map(({ s, c })=> `
       <div class="row click" data-act="ficha" data-id="${s.id}">
-        <div class="main"><div class="title">${esc(s.nombre)}</div><div class="sub">${c.mesesAdeudados.length ? 'Adeuda ' + esc(mesesTxt(c.mesesAdeudados)) : 'Cobros pendientes'}</div></div>
+        <div class="main"><div class="title">${nombreHtml(s)}</div><div class="sub">${c.mesesAdeudados.length ? 'Adeuda ' + esc(mesesTxt(c.mesesAdeudados)) : 'Cobros pendientes'}</div></div>
         <div class="val bad">${clp(c.deuda)}</div>
       </div>`).join('') : `<div class="empty">🎉 Todos los socios están al día.</div>`}
     ${r.deudaRetirados > 0 ? `<div class="note warn">Además hay ${clp(r.deudaRetirados)} de deuda pendiente de socios retirados.</div>` : ''}
@@ -957,7 +974,7 @@ VIEWS.inicio = function(){
   <div class="card">
     <div class="card-head"><h2>Últimos pagos</h2><button class="btn ghost" data-act="go" data-tab="pagos">Ver todos</button></div>
     ${ult.length ? ult.map(p=>{ const s = getById('socios', p.socioId); return `
-      <div class="row"><div class="main"><div class="title">${esc(s ? s.nombre : '(socio eliminado)')}</div><div class="sub">${fdate(p.fecha)} · ${esc(p.medio || '')}${p.por ? ' · registró ' + esc(p.por) : ''}</div></div><div class="val ok">${clp(p.monto)}</div></div>`; }).join('') : `<div class="empty">Aún no hay pagos registrados.</div>`}
+      <div class="row"><div class="main"><div class="title">${nombreHtml(s, { chip: false })}</div><div class="sub">${fdate(p.fecha)} · ${esc(p.medio || '')}${p.por ? ' · registró ' + esc(p.por) : ''}</div></div><div class="val ok">${clp(p.monto)}</div></div>`; }).join('') : `<div class="empty">Aún no hay pagos registrados.</div>`}
   </div>`;
 };
 ACT['welcome-save'] = ()=>{
@@ -981,23 +998,24 @@ VIEWS.socios = function(){
   const f = ui.sociosFiltro;
   const q = normTxt(ui.sociosBusca);
   const rows = all.map(s=> ({ s, c: cuentaSocio(s) })).filter(({ s, c })=>{
-    if(f === 'retirados' && socioActivo(s)) return false;
-    if(f !== 'retirados' && f !== 'todos' && !socioActivo(s)) return false;
+    if(f === 'retirados' && !socioBaja(s)) return false;
+    if(f !== 'retirados' && socioBaja(s)) return false;
+    if(f === 'suspendidos' && !socioSuspendido(s)) return false;
     if(f === 'deuda' && c.deuda <= 0) return false;
     if(f === 'aldia' && c.deuda > 0) return false;
     if(q && !normTxt(s.nombre + ' ' + (s.rut || '') + ' ' + formatRut(s.rut)).includes(q)) return false;
     return true;
   });
   if(f === 'deuda') rows.sort((a, b)=> b.c.deuda - a.c.deuda);
-  const cnt = k=> all.filter(s=> k === 'retirados' ? !socioActivo(s) : socioActivo(s) && (k === 'todos' || (k === 'deuda' ? cuentaSocio(s).deuda > 0 : cuentaSocio(s).deuda <= 0))).length;
+  const cnt = k=> all.filter(s=> k === 'retirados' ? socioBaja(s) : k === 'suspendidos' ? !socioBaja(s) && socioSuspendido(s) : !socioBaja(s) && (k === 'todos' || (k === 'deuda' ? cuentaSocio(s).deuda > 0 : cuentaSocio(s).deuda <= 0))).length;
   return `
   <div class="card">
-    <div class="card-head"><h2>Socios (${all.filter(socioActivo).length} activos)</h2>
+    <div class="card-head"><h2>Socios (${all.filter(x=> !socioBaja(x)).length} activos)</h2>
       <div class="btn-row"><button class="btn primary sm" data-act="nuevo-socio">+ Socio</button><button class="btn sm" data-act="importar-socios">📋 Pegar lista</button></div></div>
     <div class="toolbar">
       <input type="search" id="sBusca" placeholder="Buscar por nombre o RUT…" value="${esc(ui.sociosBusca)}">
       <div class="seg" id="sFiltro">
-        ${[['todos', 'Activos'], ['deuda', 'Con deuda'], ['aldia', 'Al día'], ['retirados', 'Retirados']].map(([k, l])=> `<button type="button" data-f="${k}" class="${f === k ? 'active' : ''}">${l} (${k === 'todos' ? all.filter(socioActivo).length : cnt(k)})</button>`).join('')}
+        ${[['todos', 'Activos'], ['deuda', 'Con deuda'], ['aldia', 'Al día'], ['suspendidos', 'Suspendidos'], ['retirados', 'Dados de baja']].map(([k, l])=> `<button type="button" data-f="${k}" class="${f === k ? 'active' : ''}">${l} (${cnt(k)})</button>`).join('')}
       </div>
     </div>
     ${(f === 'retirados' || f === 'deuda') && rows.some(r=> r.c.deuda > 0) ? `<div class="toolbar"><button class="btn sm danger" data-act="condonar-varios" data-ids="${rows.filter(r=> r.c.deuda > 0).map(r=> r.s.id).join(',')}">🧽 Borrar deuda de esta lista (${rows.filter(r=> r.c.deuda > 0).length})</button></div>` : ''}
@@ -1008,8 +1026,8 @@ function sociosRows(rows){
   if(!rows.length) return `<div class="empty">${live('socios').length ? 'No hay socios con ese filtro.' : 'Aún no hay socios. Agrégalos uno a uno o pega la lista desde Excel.'}</div>`;
   return rows.map(({ s, c })=> `
     <div class="row click" data-act="ficha" data-id="${s.id}">
-      <div class="main"><div class="title">${esc(s.nombre)}</div>
-        <div class="sub">${s.rut ? esc(formatRut(s.rut)) + ' · ' : ''}socio desde ${esc(mesLabel(socioInicio(s), true))}${s.mesTermino ? ' · retirado en ' + esc(mesLabel(s.mesTermino, true)) : ''}${c.mesesAdeudados.length ? ' · <b>' + c.mesesAdeudados.length + (c.mesesAdeudados.length === 1 ? ' mes' : ' meses') + ' adeudado' + (c.mesesAdeudados.length === 1 ? '' : 's') + '</b>' : ''}</div></div>
+      <div class="main"><div class="title">${nombreHtml(s)}</div>
+        <div class="sub">${s.rut ? esc(formatRut(s.rut)) + ' · ' : ''}socio desde ${esc(mesLabel(socioInicio(s), true))}${s.mesTermino ? ' · de baja desde ' + esc(mesLabel(idxToYm(ymToIdx(s.mesTermino) + 1), true)) : ''}${socioSuspendido(s) && !s.mesTermino ? ' · suspendido desde ' + esc(mesLabel(s.suspDesde, true)) + (s.suspHasta ? ' hasta ' + esc(mesLabel(s.suspHasta, true)) : '') : ''}${c.mesesAdeudados.length ? ' · <b>' + c.mesesAdeudados.length + (c.mesesAdeudados.length === 1 ? ' mes' : ' meses') + ' adeudado' + (c.mesesAdeudados.length === 1 ? '' : 's') + '</b>' : ''}</div></div>
       ${chipDeuda(c)}
     </div>`).join('');
 }
@@ -1035,10 +1053,12 @@ function openSocioForm(id){
       <label class="f">Teléfono<input id="fTel" type="tel" value="${esc(s.telefono || '')}"></label>
       <label class="f span2">Correo<input id="fEmail" type="email" value="${esc(s.email || '')}"></label>
       <label class="f">Paga cuota desde *<input id="fIni" type="month" value="${esc(s.mesInicio || '')}"></label>
-      <label class="f">Retiro del sindicato (mes)<input id="fFin" type="month" value="${esc(s.mesTermino || '')}"></label>
+      <label class="f">Dado de baja: último mes que paga<input id="fFin" type="month" value="${esc(s.mesTermino || '')}"></label>
+      <label class="f">Suspendido desde<input id="fSde" type="month" value="${esc(s.suspDesde || '')}"></label>
+      <label class="f">Suspendido hasta (vacío = sin fecha)<input id="fSha" type="month" value="${esc(s.suspHasta || '')}"></label>
       <label class="f span2">Notas internas<textarea id="fNotas" placeholder="Solo las ven los dirigentes">${esc(s.notas || '')}</textarea></label>
     </div>
-    <div class="note small">Desde el mes indicado se cobra la cuota automáticamente. Si el socio se retira, indica el mes de retiro: se dejan de cobrar cuotas desde el mes siguiente, pero su deuda anterior se mantiene.</div>`,
+    <div class="note small">Desde el mes indicado se cobra la cuota automáticamente. Para dar de baja o suspender es más fácil usar los botones de la ficha del socio. La deuda anterior se mantiene en ambos casos.</div>`,
     foot: ()=> `${id ? '<button class="btn danger" id="fDel">Eliminar</button><span style="flex:1"></span>' : ''}<button class="btn" data-act="close-modal">Cancelar</button><button class="btn primary" id="fSave">Guardar</button>`,
     onMount: (el)=>{
       $('#fNombre', el).focus();
@@ -1054,7 +1074,7 @@ function openSocioForm(id){
         if(rut && !rutValido(rut) && !confirm('El RUT parece no ser válido (dígito verificador). ¿Guardar igual?')) return;
         const dup = live('socios').find(x=> x.id !== s.id && rut && x.rut && x.rut.replace(/[^0-9K]/gi, '').toUpperCase() === rut.replace(/[^0-9K]/gi, '').toUpperCase());
         if(dup && !confirm('Ya existe un socio con ese RUT (' + dup.nombre + '). ¿Guardar igual?')) return;
-        Object.assign(s, { nombre, rut: rut ? formatRut(rut) : '', telefono: $('#fTel', el).value.trim(), email: $('#fEmail', el).value.trim(), mesInicio: ini, mesTermino: fin || '', notas: $('#fNotas', el).value.trim() });
+        Object.assign(s, { nombre, rut: rut ? formatRut(rut) : '', telefono: $('#fTel', el).value.trim(), email: $('#fEmail', el).value.trim(), mesInicio: ini, mesTermino: fin || '', suspDesde: $('#fSde', el).value || '', suspHasta: $('#fSde', el).value ? ($('#fSha', el).value || '') : '', notas: $('#fNotas', el).value.trim() });
         if(!s.token) s.token = randomToken(16);
         if(!s.pin) s.pin = randomPin();
         closeModal();
@@ -1144,7 +1164,7 @@ function openFicha(id){
   if(!fichaYear[id]) fichaYear[id] = new Date().getFullYear();
   openModal({
     live: true, wide: true,
-    title: ()=>{ const s = getById('socios', id); return s ? esc(s.nombre) : 'Socio eliminado'; },
+    title: ()=>{ const s = getById('socios', id); return s ? nombreHtml(s) : 'Socio eliminado'; },
     body: ()=> fichaBody(id),
     onMount: (el)=>{
       const yb = $('#fyPrev', el), yn = $('#fyNext', el);
@@ -1165,7 +1185,7 @@ function fichaBody(id){
   const pagos = c.pagos.slice().sort((a, b)=> (b.fecha || '').localeCompare(a.fecha || '') || b.u - a.u);
   const ajustes = live('ajustes').filter(a=> a.socioId === id).sort((a, b)=> (b.mes || '').localeCompare(a.mes || ''));
   return `
-  <div class="btn-row" style="margin:-4px 0 12px">${chipDeuda(c)}${!socioActivo(s) ? '<span class="chip neutral">Retirado/a en ' + esc(mesLabel(s.mesTermino)) + '</span>' : ''}${s.rut ? `<span class="chip neutral">${esc(formatRut(s.rut))}</span>` : ''}<span class="chip neutral">Socio/a desde ${esc(mesLabel(socioInicio(s)))}</span></div>
+  <div class="btn-row" style="margin:-4px 0 12px">${chipDeuda(c)}${s.mesTermino ? '<span class="chip neutral">Dado/a de baja · último mes ' + esc(mesLabel(s.mesTermino)) + '</span>' : ''}${s.suspDesde && !s.mesTermino ? '<span class="chip bad">Suspendido/a desde ' + esc(mesLabel(s.suspDesde)) + (s.suspHasta ? ' hasta ' + esc(mesLabel(s.suspHasta)) : '') + '</span>' : ''}${s.rut ? `<span class="chip neutral">${esc(formatRut(s.rut))}</span>` : ''}<span class="chip neutral">Socio/a desde ${esc(mesLabel(socioInicio(s)))}</span></div>
   <div class="tiles">
     <div class="tile"><div class="num ${c.deuda ? 'bad' : 'ok'}">${clp(c.deuda)}</div><div class="lbl">Deuda vencida</div></div>
     <div class="tile"><div class="num">${c.mesesAdeudados.length}</div><div class="lbl">Meses adeudados</div></div>
@@ -1180,6 +1200,7 @@ function fichaBody(id){
     <button class="btn" data-act="tarjeta" data-id="${id}">🪪 Tarjeta y PIN</button>
     <button class="btn" data-act="print-estado" data-id="${id}">🖨️ Estado de cuenta</button>
     <button class="btn" data-act="editar-socio" data-id="${id}">✏️ Editar datos</button>
+    ${s.mesTermino ? `<button class="btn" data-act="reincorporar" data-id="${id}">↩️ Reincorporar</button>` : `<button class="btn" data-act="suspender" data-id="${id}">${s.suspDesde ? '⏸️ Suspensión' : '⏸️ Suspender'}</button><button class="btn danger" data-act="dar-baja" data-id="${id}">⛔ Dar de baja</button>`}
   </div>
   ${c.mesesAdeudados.length ? `<div class="note bad">Adeuda: ${c.mesesAdeudados.map(m=> esc(mesLabel(m, true))).join(', ')}</div>` : ''}
   <div class="card" style="margin-bottom:12px">
@@ -1314,7 +1335,7 @@ function pickerItems(q){
   const list = sociosOrdenados().filter(s=> !q || normTxt(s.nombre + ' ' + (s.rut || '') + ' ' + String(s.rut || '').replace(/[^0-9kK]/g, '')).includes(q.replace(/\./g, ''))
     || normTxt(s.nombre).includes(q));
   if(!list.length) return `<div class="empty">No hay socios que coincidan.</div>`;
-  return list.slice(0, 60).map(s=>{ const c = cuentaSocio(s); return `<button type="button" data-sid="${s.id}"><span><b>${esc(s.nombre)}</b>${!socioActivo(s) ? ' <span class="chip neutral">retirado</span>' : ''}</span>${c.deuda > 0 ? `<span class="val bad">${clp(c.deuda)}</span>` : '<span class="chip ok">Al día</span>'}</button>`; }).join('');
+  return list.slice(0, 60).map(s=>{ const c = cuentaSocio(s); return `<button type="button" data-sid="${s.id}"><span><b>${nombreHtml(s, { chip: false })}</b></span>${c.deuda > 0 ? `<span class="val bad">${clp(c.deuda)}</span>` : '<span class="chip ok">Al día</span>'}</button>`; }).join('');
 }
 
 /* =====================================================================
@@ -1512,6 +1533,66 @@ ACT['condonar'] = el=> openCondonar([el.dataset.id]);
 ACT['condonar-varios'] = el=> openCondonar(el.dataset.ids.split(',').filter(Boolean));
 
 /* =====================================================================
+   DAR DE BAJA / REINCORPORAR / SUSPENDER
+   ===================================================================== */
+ACT['dar-baja'] = el=>{
+  const id = el.dataset.id, s = getById('socios', id);
+  const cur = ymToIdx(curYm());
+  const def = idxToYm(new Date().getDate() >= diaVenc() ? cur : cur - 1);
+  openModal({
+    title: ()=> 'Dar de baja · ' + esc(s.nombre),
+    body: ()=> `<p class="dim small">Desde el mes siguiente al indicado ya no se le cobran cuotas. Conserva su historial y la deuda que tenga. En las listas aparecerá en gris y tachado.</p>
+      <label class="f">Último mes que paga cuota<input id="bjMes" type="month" value="${def}"></label>
+      <label class="f" style="margin-top:10px">Motivo (opcional)<input id="bjMot" placeholder="Ej: Renuncia al sindicato"></label>
+      ${cuentaSocio(s).deuda > 0 ? `<div class="note warn small">Tiene ${clp(cuentaSocio(s).deuda)} de deuda. Si corresponde perdonarla, usa luego "🧽 Borrar deuda".</div>` : ''}`,
+    foot: ()=> `<button class="btn" data-act="close-modal">Cancelar</button><button class="btn danger" id="bjOk">Dar de baja</button>`,
+    onMount: (m)=>{
+      $('#bjOk', m).onclick = ()=>{
+        const mes = $('#bjMes', m).value;
+        if(!mes){ toast('Indica el último mes.', 'bad'); return; }
+        if(ymToIdx(mes) < ymToIdx(socioInicio(s)) - 1){ toast('Ese mes es anterior a su ingreso.', 'bad'); return; }
+        const mot = $('#bjMot', m).value.trim();
+        const x = Object.assign({}, getById('socios', id), { mesTermino: mes });
+        if(mot) x.notas = ((x.notas ? x.notas + '\n' : '') + 'Baja (' + mesLabel(mes) + '): ' + mot);
+        closeModal(); upsert('socios', x); refreshOpenModal();
+        toast(`✓ ${s.nombre} dado/a de baja`, 'ok');
+      };
+    },
+  });
+};
+ACT['reincorporar'] = async el=>{
+  const s = getById('socios', el.dataset.id);
+  if(!await confirmar(`¿Reincorporar a <b>${esc(s.nombre)}</b>? Se le volverán a cobrar cuotas desde el mes siguiente a su baja (${esc(mesLabel(idxToYm(ymToIdx(s.mesTermino) + 1)))}). Si se reincorporó después, ajusta los meses intermedios con "Exención".`, 'Reincorporar')) return;
+  upsert('socios', Object.assign({}, s, { mesTermino: '' })); refreshOpenModal();
+};
+ACT['suspender'] = el=>{
+  const id = el.dataset.id, s = getById('socios', id);
+  openModal({
+    title: ()=> 'Suspensión · ' + esc(s.nombre),
+    body: ()=> `<p class="dim small">Mientras esté suspendido/a no se le cobran cuotas ni cobros extraordinarios, pero sigue siendo socio/a. En las listas aparece con un punto rojo.</p>
+      <div class="grid2"><label class="f">Suspendido/a desde<input id="spDe" type="month" value="${esc(s.suspDesde || curYm())}"></label>
+      <label class="f">Hasta (vacío = sin fecha)<input id="spHa" type="month" value="${esc(s.suspHasta || '')}"></label></div>`,
+    foot: ()=> `${s.suspDesde ? '<button class="btn" id="spFin">Quitar suspensión</button><span style="flex:1"></span>' : ''}<button class="btn" data-act="close-modal">Cancelar</button><button class="btn primary" id="spOk">Guardar</button>`,
+    onMount: (m)=>{
+      $('#spOk', m).onclick = ()=>{
+        const de = $('#spDe', m).value, ha = $('#spHa', m).value;
+        if(!de){ toast('Indica desde qué mes.', 'bad'); return; }
+        if(ha && ymToIdx(ha) < ymToIdx(de)){ toast('"Hasta" no puede ser anterior a "desde".', 'bad'); return; }
+        closeModal(); upsert('socios', Object.assign({}, getById('socios', id), { suspDesde: de, suspHasta: ha || '' })); refreshOpenModal();
+        toast('✓ Suspensión guardada', 'ok');
+      };
+      const fin = $('#spFin', m);
+      if(fin) fin.onclick = async ()=>{
+        const cur = ymToIdx(curYm());
+        const ha = idxToYm(Math.max(ymToIdx(s.suspDesde), cur - 1));
+        if(!await confirmar(`¿Terminar la suspensión? Quedará registrada de ${esc(mesLabel(s.suspDesde))} a ${esc(mesLabel(ha))} y desde ${esc(mesLabel(idxToYm(ymToIdx(ha) + 1)))} se cobran cuotas de nuevo. (Para borrarla por completo, deja "desde" y "hasta" vacíos en "Editar datos".)`, 'Terminar')) return;
+        closeModal(); upsert('socios', Object.assign({}, getById('socios', id), { suspHasta: ha })); refreshOpenModal();
+      };
+    },
+  });
+};
+
+/* =====================================================================
    PLANES DE PAGO (convenios de deuda con descuento por planilla)
    Cada plan reparte una deuda en N cuotas mensuales. Mes a mes, cada
    descuento se marca con un toque: Autorizado → Descontado (crea el pago)
@@ -1602,7 +1683,7 @@ VIEWS.planes = function(){
     ${planes.length ? sociosOrdenados(planes.map(p=> getById('socios', p.socioId)).filter(Boolean).filter((s, i, a)=> a.indexOf(s) === i)).map(s=> planes.filter(p=> p.socioId === s.id).map(p=>{
       const r = planResumen(p);
       const st = r.anulado ? '<span class="chip neutral">Anulado</span>' : r.terminado ? '<span class="chip ok">Terminado</span>' : ymToIdx(p.inicio) > cur ? '<span class="chip info">Por iniciar</span>' : '<span class="chip primary">En curso</span>';
-      return `<div class="row click" data-act="ver-plan" data-id="${p.id}"><div class="main"><div class="title">${esc(s.nombre)}</div>
+      return `<div class="row click" data-act="ver-plan" data-id="${p.id}"><div class="main"><div class="title">${nombreHtml(s)}</div>
         <div class="sub">${clp(p.deudaInicial)} en ${r.n} cuotas de ${clp(p.montoCuota)}${p.incluyeCuota ? ' + cuota mensual' : ''} · ${esc(mesLabel(p.inicio, true))} a ${esc(mesLabel(r.fin, true))}${r.rech ? ` · ${r.rech} no autorizada${r.rech > 1 ? 's' : ''}` : ''}</div>
         <div class="sub"><b>${r.pagadas} de ${r.n}</b> descontadas · saldo del plan ${clp(r.saldo)}</div></div>${st}</div>`;
     }).join('')).join('') : '<div class="empty">Aún no hay planes. Los socios con deuda aparecen al crear un plan.</div>'}
@@ -1613,7 +1694,7 @@ function planRowHtml(r){
   const btn = (k)=> `<button type="button" class="pl-b ${e === k ? 'on ' + k : ''}" data-act="plan-marca" data-plan="${r.p.id}" data-e="${k}" aria-pressed="${e === k}">${PLAN_EST[k].ico} ${PLAN_EST[k].lbl}</button>`;
   const n = Number(r.p.cuotas) || 1;
   return `<div class="pl-row" id="pl-${r.p.id}">
-    <div class="pl-main"><a href="#" class="title" data-act="ficha" data-id="${r.s.id}">${esc(r.s.nombre)}</a>
+    <div class="pl-main"><a href="#" class="title" data-act="ficha" data-id="${r.s.id}">${nombreHtml(r.s)}</a>
       <div class="sub">Cuota ${r.m.k} de ${n} del plan: <b>${clp(r.m.abono)}</b>${r.m.cuota ? ` + cuota del mes ${clp(r.m.cuota)}` : ''} = <b>${clp(r.m.total)}</b>${r.mk && r.mk.por ? ` · ${esc(r.mk.por)}` : ''}</div></div>
     <div class="pl-btns">${btn('autorizado')}${btn('descontado')}${btn('rechazado')}</div>
   </div>`;
@@ -1839,7 +1920,7 @@ function acuerdoHtml(){
         const sug = acuerdoMontoSugerido(r.s, mes);
         const val = r.a ? r.a.monto : (sug || '');
         const pagado = !!(r.a && r.a.pagoId);
-        return `<tr data-sid="${r.s.id}" class="${pagado ? 'done' : ''}"><td><a href="#" data-act="ficha" data-id="${r.s.id}"><b>${esc(r.s.nombre)}</b></a>${r.c.mesesAdeudados.length ? `<div class="tiny dim">${esc(mesesTxt(r.c.mesesAdeudados))}</div>` : ''}${!r.a && sug ? '<div class="tiny dim">Sugerido por su plan de pago</div>' : ''}</td>
+        return `<tr data-sid="${r.s.id}" class="${pagado ? 'done' : ''}"><td><a href="#" data-act="ficha" data-id="${r.s.id}"><b>${nombreHtml(r.s)}</b></a>${r.c.mesesAdeudados.length ? `<div class="tiny dim">${esc(mesesTxt(r.c.mesesAdeudados))}</div>` : ''}${!r.a && sug ? '<div class="tiny dim">Sugerido por su plan de pago</div>' : ''}</td>
           <td class="r val bad">${clp(r.deuda)}</td>
           <td class="r"><input class="acMonto" inputmode="numeric" value="${val ? miles(val) : ''}" placeholder="$0" style="text-align:right" ${pagado ? 'disabled' : ''}>${r.a && r.a.monto > 0 ? `<button type="button" class="pl-b ac-b ${pagado ? 'on descontado' : ''}" data-act="ac-desc" data-sid="${r.s.id}">💵 ${pagado ? 'Descontado' : 'Marcar descontado'}</button>` : ''}</td></tr>`;
       }).join('')}
@@ -2038,7 +2119,7 @@ VIEWS.pagos = function(){
     ${list.length ? `<div class="table-wrap"><table class="t"><thead><tr><th>Fecha</th><th>Socio</th><th class="r">Monto</th><th>Medio</th><th>Registró</th><th></th></tr></thead><tbody>
       ${list.slice(0, 400).map(p=>{ const s = getById('socios', p.socioId); return `<tr>
         <td style="white-space:nowrap">${fdate(p.fecha)}</td>
-        <td>${s ? `<a href="#" data-act="ficha" data-id="${s.id}">${esc(s.nombre)}</a>` : '<span class="dim">(eliminado)</span>'}${p.obs ? `<div class="tiny dim">${esc(p.obs)}</div>` : ''}</td>
+        <td>${s ? `<a href="#" data-act="ficha" data-id="${s.id}">${nombreHtml(s, { chip: false })}</a>` : '<span class="dim">(eliminado)</span>'}${p.obs ? `<div class="tiny dim">${esc(p.obs)}</div>` : ''}</td>
         <td class="r"><b>${clp(p.monto)}</b></td><td class="small">${esc(p.medio || '')}</td><td class="small dim">${esc(p.por || '')}</td>
         <td class="r"><button class="btn ghost sm" data-act="editar-pago" data-id="${p.id}" title="Editar">✏️</button></td></tr>`; }).join('')}
     </tbody></table></div>${list.length > 400 ? '<div class="dim small" style="margin-top:6px">Se muestran los 400 más recientes. Usa el filtro por mes o exporta a Excel.</div>' : ''}` : `<div class="empty">No hay pagos con ese filtro.</div>`}
