@@ -180,6 +180,17 @@ details.adv > summary{ cursor:pointer; color:var(--primary); font-weight:700; pa
 .kv dt{ color:var(--dim); font-weight:600; } .kv dd{ margin:0; font-weight:700; overflow-wrap:anywhere; }
 .welcome{ max-width:560px; margin:30px auto; }
 .welcome .big{ font-size:2.6rem; }
+.pl-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 0; border-bottom:1px solid var(--border); flex-wrap:wrap; }
+.pl-row:last-child{ border-bottom:none; }
+.pl-main{ min-width:0; flex:1 1 260px; }
+.pl-main .title{ font-weight:800; color:var(--text); text-decoration:none; overflow-wrap:anywhere; }
+.pl-main .sub{ color:var(--dim); font-size:0.84rem; }
+.pl-btns{ display:flex; gap:6px; flex-wrap:wrap; }
+.pl-b{ min-height:40px; padding:6px 11px; border-radius:10px; border:1px solid var(--border); background:var(--card); color:var(--dim); font-weight:700; font-size:0.85rem; cursor:pointer; white-space:nowrap; }
+.pl-b.on.autorizado{ background:var(--info-bg); color:var(--info); border-color:transparent; }
+.pl-b.on.descontado{ background:var(--ok-bg); color:var(--ok); border-color:transparent; }
+.pl-b.on.rechazado{ background:var(--bad-bg); color:var(--bad); border-color:transparent; }
+@media (max-width:520px){ .pl-btns{ width:100%; flex-wrap:nowrap; } .pl-b{ flex:1 1 0; min-width:0; padding:6px 2px; font-size:0.76rem; white-space:normal; line-height:1.15; } }
 #printArea{ display:none; }
 @media print{
   body > *:not(#printArea){ display:none !important; }
@@ -212,6 +223,7 @@ details.adv > summary{ cursor:pointer; color:var(--primary); font-weight:700; pa
     <button type="button" data-tab="inicio">🏠 Inicio</button>
     <button type="button" data-tab="socios">👥 Socios</button>
     <button type="button" data-tab="pagos">💵 Pagos</button>
+    <button type="button" data-tab="planes">🤝 Planes de pago</button>
     <button type="button" data-tab="cuotas">📅 Cuotas</button>
     <button type="button" data-tab="portal">🪪 Portal</button>
     <button type="button" data-tab="ajustes">⚙️ Ajustes</button>
@@ -280,7 +292,7 @@ function rutValido(r){
 /* ---------- Estado ----------
    Cada registro lleva id, u (última modificación, ms) y del (borrado lógico).
    Así los cambios de varios dirigentes se combinan registro por registro sin pisarse. */
-const COLS = ['tarifas', 'socios', 'pagos', 'cobros', 'ajustes'];
+const COLS = ['tarifas', 'socios', 'pagos', 'cobros', 'ajustes', 'planes', 'autoriz'];
 const MEDIOS = ['Efectivo', 'Transferencia', 'Descuento por planilla', 'Depósito', 'Otro'];
 function emptyState(){
   return { v: 1, config: { nombre: '', diaVencimiento: 10, mesInicioDefault: curYm(), portalAuto: true, u: 0 }, tarifas: [], socios: [], pagos: [], cobros: [], ajustes: [] };
@@ -716,6 +728,7 @@ function buildPortalPayload(s){
     items: c.items.map(it=> ({ t: it.tipo, m: it.mes, c: it.concepto, mo: it.monto, p: it.pagado || 0 })),
     pagos: c.pagos.slice().sort((a, b)=> (b.fecha || '').localeCompare(a.fecha || '')).slice(0, 60).map(p=> ({ f: p.fecha, mo: Number(p.monto) || 0, me: p.medio || '' })),
     desc: c.descuentos.map(d=> ({ m: d.mes, mo: Number(d.monto) || 0, c: d.concepto || 'Descuento' })),
+    plan: (()=>{ const pl = (typeof planActivoDe === 'function') && planActivoDe(s.id); if(!pl) return null; const r = planResumen(pl); const nx = planMontoMes(pl, idxToYm(ymToIdx(curYm()) + (planMarca(pl, curYm()) ? 1 : 0))); return { n: r.n, p: r.pagadas, mo: Number(pl.montoCuota) || 0, inc: !!pl.incluyeCuota, fin: r.fin, saldo: r.saldo, prox: nx.total }; })(),
   };
 }
 let portalTimer = null, portalRunning = null;
@@ -1138,6 +1151,7 @@ function fichaBody(id){
   <div class="btn-row" style="margin-bottom:14px">
     <button class="btn primary" data-act="nuevo-pago" data-id="${id}">💵 Registrar pago</button>
     <button class="btn" data-act="ajuste" data-id="${id}">➕ Exención / cargo / descuento</button>
+    ${(()=>{ const pl = planActivoDe(id); return pl ? `<button class="btn" data-act="ver-plan" data-id="${pl.id}">🤝 Plan de pago (${planResumen(pl).pagadas}/${pl.cuotas})</button>` : (c.deuda > 0 ? `<button class="btn" data-act="nuevo-plan" data-id="${id}">🤝 Crear plan de pago</button>` : ''); })()}
     <button class="btn" data-act="tarjeta" data-id="${id}">🪪 Tarjeta y PIN</button>
     <button class="btn" data-act="print-estado" data-id="${id}">🖨️ Estado de cuenta</button>
     <button class="btn" data-act="editar-socio" data-id="${id}">✏️ Editar datos</button>
@@ -1425,6 +1439,294 @@ ACT['tarjeta'] = el=>{
   });
 };
 ACT['go-ajustes-close'] = ()=>{ while(modalStack.length) closeModal(); goTab('ajustes'); };
+
+/* =====================================================================
+   PLANES DE PAGO (convenios de deuda con descuento por planilla)
+   Cada plan reparte una deuda en N cuotas mensuales. Mes a mes, cada
+   descuento se marca con un toque: Autorizado → Descontado (crea el pago)
+   o No autorizado (esa cuota se corre al mes siguiente).
+   ===================================================================== */
+const PLAN_EST = {
+  autorizado: { lbl: 'Autorizado', ico: '✅', chip: 'info' },
+  descontado: { lbl: 'Descontado', ico: '💵', chip: 'ok' },
+  rechazado: { lbl: 'No autorizado', ico: '✕', chip: 'bad' },
+};
+function planMarcas(p){ return live('autoriz').filter(a=> a.planId === p.id); }
+function planMarca(p, mes){ return live('autoriz').find(a=> a.planId === p.id && a.mes === mes) || null; }
+function planAbono(p, k){
+  const n = Number(p.cuotas) || 1, m = Number(p.montoCuota) || 0, tot = Number(p.deudaInicial) || 0;
+  if(k < 1 || k > n) return 0;
+  return k < n ? m : Math.max(0, tot - m * (n - 1));
+}
+/* Número de cuota que toca en un mes. Los meses "no autorizado" no cuentan, así que el plan se alarga. */
+function planCuotaEn(p, mes){
+  if(p.anulado) return 0;
+  const i = ymToIdx(mes), start = ymToIdx(p.inicio);
+  if(isNaN(i) || i < start) return 0;
+  const rech = planMarcas(p).filter(a=> a.estado === 'rechazado' && ymToIdx(a.mes) < i).length;
+  const k = i - start + 1 - rech;
+  const mk = planMarca(p, mes);
+  if(mk && mk.estado === 'rechazado') return k <= (Number(p.cuotas) || 1) ? k : 0;
+  return k <= (Number(p.cuotas) || 1) ? k : 0;
+}
+function planMontoMes(p, mes){
+  const k = planCuotaEn(p, mes);
+  if(!k) return { k: 0, abono: 0, cuota: 0, total: 0 };
+  const abono = planAbono(p, k);
+  const cuota = p.incluyeCuota ? tarifaDe(mes) : 0;
+  return { k, abono, cuota, total: abono + cuota };
+}
+function planResumen(p){
+  const ms = planMarcas(p);
+  const desc = ms.filter(a=> a.estado === 'descontado');
+  const pagadas = desc.length;
+  const abonado = desc.reduce((a, m)=> a + (Number(m.abono) || 0), 0);
+  const n = Number(p.cuotas) || 1;
+  const rech = ms.filter(a=> a.estado === 'rechazado').length;
+  const fin = idxToYm(ymToIdx(p.inicio) + n - 1 + rech);
+  return { pagadas, n, abonado, saldo: Math.max(0, (Number(p.deudaInicial) || 0) - abonado), rech, fin, terminado: pagadas >= n, anulado: !!p.anulado };
+}
+function planActivoDe(sid){ return live('planes').find(p=> p.socioId === sid && !p.anulado && !planResumen(p).terminado) || null; }
+
+/* ---------- Vista ---------- */
+ui.planMes = ui.planMes || curYm();
+ui.planFecha = ui.planFecha || todayISO();
+VIEWS.planes = function(){
+  const mes = ui.planMes;
+  const planes = live('planes');
+  const rows = planes.map(p=> ({ p, s: getById('socios', p.socioId), m: planMontoMes(p, mes), mk: planMarca(p, mes) }))
+    .filter(r=> r.s && (r.m.k || r.mk))
+    .sort((a, b)=> normTxt(a.s.nombre).localeCompare(normTxt(b.s.nombre)));
+  const cnt = e=> rows.filter(r=> r.mk && r.mk.estado === e).length;
+  const pend = rows.filter(r=> !r.mk).length;
+  const totalAut = rows.filter(r=> r.mk && r.mk.estado !== 'rechazado').reduce((a, r)=> a + r.m.total, 0);
+  const totalDesc = rows.filter(r=> r.mk && r.mk.estado === 'descontado').reduce((a, r)=> a + (Number(r.mk.monto) || r.m.total), 0);
+  const activos = planes.filter(p=> !p.anulado && !planResumen(p).terminado);
+  const cur = ymToIdx(curYm());
+  return `
+  <div class="card">
+    <div class="card-head"><h2>Descuentos por planilla del mes</h2><button class="btn primary sm" data-act="nuevo-plan">+ Nuevo plan de pago</button></div>
+    <div class="yearbar" style="flex-wrap:wrap">
+      <button class="btn sm" data-act="plan-mes" data-d="-1">‹</button><b style="min-width:150px">${esc(mesLabelCap(mes))}</b><button class="btn sm" data-act="plan-mes" data-d="1">›</button>
+      ${mes !== curYm() ? '<button class="btn ghost sm" data-act="plan-mes" data-d="0">Ir al mes actual</button>' : ''}
+      <label class="f" style="margin-left:auto;flex-direction:row;align-items:center;gap:6px">Fecha del descuento<input type="date" id="plFecha" value="${esc(ui.planFecha)}" style="width:auto"></label>
+    </div>
+    <div class="tiles">
+      <div class="tile"><div class="num">${rows.length}</div><div class="lbl">Planes este mes</div></div>
+      <div class="tile"><div class="num">${pend}</div><div class="lbl">Sin marcar</div></div>
+      <div class="tile"><div class="num">${cnt('autorizado') + cnt('descontado')}<span class="dim small"> · ${clp(totalAut)}</span></div><div class="lbl">Autorizados</div></div>
+      <div class="tile"><div class="num ok">${cnt('descontado')}<span class="dim small"> · ${clp(totalDesc)}</span></div><div class="lbl">Descontados</div></div>
+    </div>
+    ${rows.length ? `
+    <div class="toolbar">
+      <button class="btn sm" data-act="plan-todos" data-e="autorizado" ${pend ? '' : 'disabled'}>✅ Autorizar todos los pendientes (${pend})</button>
+      <button class="btn sm" data-act="plan-todos" data-e="descontado" ${cnt('autorizado') ? '' : 'disabled'}>💵 Marcar autorizados como descontados (${cnt('autorizado')})</button>
+      <button class="btn sm" data-act="plan-nomina">🖨️ Nómina para remuneraciones</button>
+    </div>
+    <div class="note small">Un toque marca el estado; otro toque sobre el mismo botón lo quita. <b>Descontado</b> registra el pago (${'Descuento por planilla'}). <b>No autorizado</b> corre esa cuota del plan al mes siguiente.</div>
+    <div id="plRows">${rows.map(planRowHtml).join('')}</div>` : `<div class="empty">No hay planes de pago con cuotas en ${esc(mesLabel(mes))}.${planes.length ? '' : '<br>Crea uno con "+ Nuevo plan de pago".'}</div>`}
+  </div>
+  <div class="card">
+    <h2>Planes de pago (${activos.length} activos)</h2>
+    ${planes.length ? sociosOrdenados(planes.map(p=> getById('socios', p.socioId)).filter(Boolean).filter((s, i, a)=> a.indexOf(s) === i)).map(s=> planes.filter(p=> p.socioId === s.id).map(p=>{
+      const r = planResumen(p);
+      const st = r.anulado ? '<span class="chip neutral">Anulado</span>' : r.terminado ? '<span class="chip ok">Terminado</span>' : ymToIdx(p.inicio) > cur ? '<span class="chip info">Por iniciar</span>' : '<span class="chip primary">En curso</span>';
+      return `<div class="row click" data-act="ver-plan" data-id="${p.id}"><div class="main"><div class="title">${esc(s.nombre)}</div>
+        <div class="sub">${clp(p.deudaInicial)} en ${r.n} cuotas de ${clp(p.montoCuota)}${p.incluyeCuota ? ' + cuota mensual' : ''} · ${esc(mesLabel(p.inicio, true))} a ${esc(mesLabel(r.fin, true))}${r.rech ? ` · ${r.rech} no autorizada${r.rech > 1 ? 's' : ''}` : ''}</div>
+        <div class="sub"><b>${r.pagadas} de ${r.n}</b> descontadas · saldo del plan ${clp(r.saldo)}</div></div>${st}</div>`;
+    }).join('')).join('') : '<div class="empty">Aún no hay planes. Los socios con deuda aparecen al crear un plan.</div>'}
+  </div>`;
+};
+function planRowHtml(r){
+  const e = r.mk ? r.mk.estado : '';
+  const btn = (k)=> `<button type="button" class="pl-b ${e === k ? 'on ' + k : ''}" data-act="plan-marca" data-plan="${r.p.id}" data-e="${k}" aria-pressed="${e === k}">${PLAN_EST[k].ico} ${PLAN_EST[k].lbl}</button>`;
+  const n = Number(r.p.cuotas) || 1;
+  return `<div class="pl-row" id="pl-${r.p.id}">
+    <div class="pl-main"><a href="#" class="title" data-act="ficha" data-id="${r.s.id}">${esc(r.s.nombre)}</a>
+      <div class="sub">Cuota ${r.m.k} de ${n} del plan: <b>${clp(r.m.abono)}</b>${r.m.cuota ? ` + cuota del mes ${clp(r.m.cuota)}` : ''} = <b>${clp(r.m.total)}</b>${r.mk && r.mk.por ? ` · ${esc(r.mk.por)}` : ''}</div></div>
+    <div class="pl-btns">${btn('autorizado')}${btn('descontado')}${btn('rechazado')}</div>
+  </div>`;
+}
+VIEWS.planes.mount = function(v){
+  const f = $('#plFecha', v); if(f) f.onchange = ()=>{ ui.planFecha = f.value || todayISO(); };
+};
+ACT['plan-mes'] = el=>{ const d = Number(el.dataset.d); ui.planMes = d === 0 ? curYm() : idxToYm(ymToIdx(ui.planMes) + d); renderView(); };
+
+/* Marca o desmarca un estado (un solo toque) */
+function setPlanEstado(p, mes, estado, quiet){
+  const mk = planMarca(p, mes);
+  const m = planMontoMes(p, mes);
+  // quitar pago asociado si deja de estar descontado
+  if(mk && mk.estado === 'descontado' && mk.pagoId && estado !== 'descontado'){
+    const pg = S.pagos.find(x=> x.id === mk.pagoId); if(pg){ pg.del = true; pg.u = now(); }
+  }
+  if(!estado){ if(mk){ mk.del = true; mk.u = now(); } return; }
+  const rec = mk || { id: uid(), planId: p.id, mes };
+  rec.estado = estado; rec.por = yo(); rec.u = now(); rec.del = false;
+  if(estado === 'descontado'){
+    if(!rec.pagoId || !S.pagos.some(x=> x.id === rec.pagoId && !x.del)){
+      const pago = { id: uid(), socioId: p.socioId, monto: m.total, fecha: ui.planFecha || todayISO(), medio: 'Descuento por planilla', obs: `Plan de pago: cuota ${m.k} de ${p.cuotas}${m.cuota ? ' + cuota ' + mesLabel(mes) : ''}`, por: yo(), creado: now(), u: now(), planId: p.id };
+      S.pagos.push(pago); rec.pagoId = pago.id;
+    }
+    rec.monto = m.total; rec.abono = m.abono;
+  } else { rec.pagoId = null; rec.monto = 0; rec.abono = 0; }
+  if(!mk) S.autoriz.push(rec);
+}
+ACT['plan-marca'] = el=>{
+  const p = getById('planes', el.dataset.plan); if(!p) return;
+  const mes = ui.planMes;
+  const mk = planMarca(p, mes);
+  const nuevo = mk && mk.estado === el.dataset.e ? null : el.dataset.e;
+  setPlanEstado(p, mes, nuevo);
+  changed({ noRender: true });
+  // actualiza solo esa fila y los contadores, sin perder la posición
+  const y = window.scrollY; renderView(); window.scrollTo(0, y);
+};
+ACT['plan-todos'] = async el=>{
+  const e = el.dataset.e, mes = ui.planMes;
+  const planes = live('planes').filter(p=> planMontoMes(p, mes).k);
+  const objetivo = planes.filter(p=>{ const mk = planMarca(p, mes); return e === 'autorizado' ? !mk : (mk && mk.estado === 'autorizado'); });
+  if(!objetivo.length) return;
+  if(e === 'descontado' && !await confirmar(`¿Registrar ${objetivo.length} pago(s) por descuento por planilla con fecha ${fdate(ui.planFecha)}?`, 'Registrar')) return;
+  objetivo.forEach(p=> setPlanEstado(p, mes, e));
+  changed();
+  toast(`✓ ${objetivo.length} marcados como ${PLAN_EST[e].lbl.toLowerCase()}`, 'ok');
+};
+ACT['plan-nomina'] = ()=>{
+  const mes = ui.planMes;
+  const rows = live('planes').map(p=> ({ p, s: getById('socios', p.socioId), m: planMontoMes(p, mes), mk: planMarca(p, mes) }))
+    .filter(r=> r.s && r.m.k && (!r.mk || r.mk.estado !== 'rechazado'))
+    .sort((a, b)=> normTxt(a.s.nombre).localeCompare(normTxt(b.s.nombre)));
+  const tot = rows.reduce((a, r)=> a + r.m.total, 0);
+  printHtml(`<h1 class="p">${esc(S.config.nombre || 'Sindicato')}</h1>
+    <div><b>Nómina de descuentos por planilla · ${esc(mesLabelCap(mes))}</b> · emitida el ${fdate(todayISO())}</div>
+    <table class="p"><tr><th>N°</th><th>Nombre</th><th>RUT</th><th>Detalle</th><th class="r">Monto a descontar</th><th>Firma de autorización</th></tr>
+    ${rows.map((r, i)=> `<tr><td>${i + 1}</td><td>${esc(r.s.nombre)}</td><td>${esc(r.s.rut ? formatRut(r.s.rut) : '')}</td><td>Plan de pago, cuota ${r.m.k} de ${r.p.cuotas}${r.m.cuota ? ' + cuota sindical' : ''}</td><td class="r">${clp(r.m.total)}</td><td style="width:38mm"></td></tr>`).join('')}
+    <tr><th colspan="4">Total</th><th class="r">${clp(tot)}</th><th></th></tr></table>
+    <p style="font-size:9pt;margin-top:6mm">Los socios indicados autorizan el descuento de su remuneración del mes de ${esc(mesLabel(mes))} por el monto señalado, destinado al pago de cuotas sindicales adeudadas según el plan de pago acordado con la directiva.</p>`);
+};
+
+/* ---------- Crear / ver plan ---------- */
+function planCalendario(p){
+  const out = []; const n = Number(p.cuotas) || 1;
+  for(let k = 1; k <= n; k++){ const mes = idxToYm(ymToIdx(p.inicio) + k - 1); const ab = planAbono(p, k); const cu = p.incluyeCuota ? tarifaDe(mes) : 0; out.push({ k, mes, ab, cu, tot: ab + cu }); }
+  return out;
+}
+function openPlanForm(socioId){
+  const st = { socioId: socioId || null, busca: '', cuotas: 6, monto: 0, inicio: idxToYm(ymToIdx(curYm()) + 1), incluyeCuota: true, modo: 'cuotas' };
+  // Deuda que cubre el plan. Si el plan descuenta también la cuota del mes, las cuotas de los meses
+  // del plan que ya vencieron se pagan con esa cuota y no se cuentan dos veces.
+  const deudaDe = sid=>{
+    const s = getById('socios', sid); if(!s) return 0;
+    const c = cuentaSocio(s);
+    if(!st.incluyeCuota) return c.deuda;
+    const ini = ymToIdx(st.inicio);
+    const dup = c.items.filter(it=> it.tipo === 'cuota' && it.vencido && it.idx >= ini).reduce((a, it)=> a + (it.monto - (it.pagado || 0)), 0);
+    return Math.max(0, c.deuda - dup);
+  };
+  const recalc = ()=>{
+    const d = deudaDe(st.socioId);
+    if(st.modo === 'cuotas'){ st.cuotas = Math.max(1, Math.min(36, st.cuotas || 1)); st.monto = Math.ceil(d / st.cuotas / 100) * 100; }
+    else { st.monto = Math.max(100, st.monto || 0); st.cuotas = Math.max(1, Math.ceil(d / st.monto)); }
+  };
+  const m = openModal({
+    wide: true,
+    title: ()=> 'Nuevo plan de pago',
+    body: ()=>{
+      const s = st.socioId ? getById('socios', st.socioId) : null;
+      if(!s){
+        const deudores = sociosOrdenados().map(x=> ({ x, c: cuentaSocio(x) })).filter(o=> o.c.deuda > 0 && !planActivoDe(o.x.id) && (!st.busca || normTxt(o.x.nombre).includes(normTxt(st.busca))));
+        return `<label class="f">Socio con deuda<input id="npBusca" type="search" placeholder="Buscar…" value="${esc(st.busca)}" autocomplete="off"></label>
+          <div class="picker-list">${deudores.length ? deudores.map(o=> `<button type="button" data-sid="${o.x.id}"><span><b>${esc(o.x.nombre)}</b> <span class="dim small">${o.c.mesesAdeudados.length} meses</span></span><span class="val bad">${clp(o.c.deuda)}</span></button>`).join('') : '<div class="empty">No hay socios con deuda sin plan activo.</div>'}</div>`;
+      }
+      recalc();
+      const d = deudaDe(s.id);
+      const p = { inicio: st.inicio, cuotas: st.cuotas, montoCuota: st.monto, deudaInicial: d, incluyeCuota: st.incluyeCuota };
+      const cal = planCalendario(p);
+      const prom = cal.reduce((a, c)=> a + c.tot, 0) / cal.length;
+      return `<div class="sel-socio"><div><div style="font-weight:800">${esc(s.nombre)}</div><div class="small">Deuda vencida a la fecha: <b>${clp(cuentaSocio(s).deuda)}</b>${d !== cuentaSocio(s).deuda ? ` · el plan cubre <b>${clp(d)}</b> (la cuota de ${esc(mesLabel(st.inicio))} se descuenta aparte)` : ''}${cuentaSocio(s).mesesAdeudados.length ? ' · ' + esc(mesesTxt(cuentaSocio(s).mesesAdeudados)) : ''}</div></div>${socioId ? '' : '<button class="btn sm" id="npCambiar">Cambiar</button>'}</div>
+        <div class="seg" id="npModo" style="margin-top:12px"><button type="button" data-m="cuotas" class="${st.modo === 'cuotas' ? 'active' : ''}">Por número de cuotas</button><button type="button" data-m="monto" class="${st.modo === 'monto' ? 'active' : ''}">Por monto mensual</button></div>
+        <div class="grid3" style="margin-top:10px">
+          ${st.modo === 'cuotas' ? `<label class="f">N° de cuotas<input id="npN" type="number" min="1" max="36" value="${st.cuotas}"></label>` : `<label class="f">Abono mensual ($)<input id="npM" inputmode="numeric" value="${miles(st.monto)}"></label>`}
+          <label class="f">Primer descuento<input id="npIni" type="month" value="${esc(st.inicio)}"></label>
+          <label class="check" style="align-self:end;padding-bottom:10px"><input type="checkbox" id="npInc" ${st.incluyeCuota ? 'checked' : ''}> Descontar también la cuota del mes</label>
+        </div>
+        <div class="preview"><b>${st.cuotas} cuota${st.cuotas > 1 ? 's' : ''}</b> de ${clp(st.monto)}${cal.length > 1 && cal[cal.length - 1].ab !== st.monto ? ` (la última de ${clp(cal[cal.length - 1].ab)})` : ''}${st.incluyeCuota ? ` + cuota mensual · descuento total aprox. <b>${clp(prom)}</b> al mes` : ''}. Termina en ${esc(mesLabel(cal[cal.length - 1].mes))}.</div>
+        <div class="table-wrap" style="margin-top:10px;max-height:34vh;overflow:auto"><table class="t"><thead><tr><th>Cuota</th><th>Mes</th><th class="r">Abono deuda</th><th class="r">Cuota del mes</th><th class="r">Total a descontar</th></tr></thead><tbody>
+          ${cal.map(c=> `<tr><td>${c.k}</td><td>${esc(mesLabelCap(c.mes))}</td><td class="r">${clp(c.ab)}</td><td class="r">${c.cu ? clp(c.cu) : '—'}</td><td class="r"><b>${clp(c.tot)}</b></td></tr>`).join('')}
+        </tbody></table></div>
+        <label class="f" style="margin-top:10px">Notas (opcional)<input id="npNotas" placeholder="Ej: acordado en reunión del 28/10"></label>
+        <div class="note small">Cada mes el descuento debe autorizarse. Si un mes no se autoriza, esa cuota se corre al mes siguiente. La deuda baja cuando marcas el mes como <b>Descontado</b>.</div>`;
+    },
+    foot: ()=> `<button class="btn" data-act="close-modal">Cancelar</button>${st.socioId ? '<button class="btn primary" id="npOk">Crear plan</button>' : ''}`,
+    onMount: (el)=>{
+      const b = $('#npBusca', el);
+      if(b){ b.focus(); b.oninput = ()=>{ st.busca = b.value; const pos = b.selectionStart; drawModal(m); const n2 = $('#npBusca', m.el); n2.focus(); try{ n2.setSelectionRange(pos, pos); }catch(e){} }; }
+      $$('.picker-list button[data-sid]', el).forEach(x=> x.onclick = ()=>{ st.socioId = x.dataset.sid; drawModal(m); });
+      const c = $('#npCambiar', el); if(c) c.onclick = ()=>{ st.socioId = null; drawModal(m); };
+      const md = $('#npModo', el); if(md) md.onclick = e=>{ const x = e.target.closest('button[data-m]'); if(x){ st.modo = x.dataset.m; drawModal(m); } };
+      const n = $('#npN', el); if(n) n.onchange = ()=>{ st.cuotas = parseInt(n.value, 10) || 1; drawModal(m); };
+      const mo = $('#npM', el); if(mo) mo.onchange = ()=>{ st.monto = parseMonto(mo.value); drawModal(m); };
+      const ini = $('#npIni', el); if(ini) ini.onchange = ()=>{ st.inicio = ini.value || st.inicio; drawModal(m); };
+      const inc = $('#npInc', el); if(inc) inc.onchange = ()=>{ st.incluyeCuota = inc.checked; drawModal(m); };
+      const ok = $('#npOk', el);
+      if(ok) ok.onclick = ()=>{
+        recalc();
+        const d = deudaDe(st.socioId);
+        if(d <= 0){ toast('Este socio no tiene deuda vencida.', 'bad'); return; }
+        const s = getById('socios', st.socioId);
+        closeModal();
+        upsert('planes', { id: uid(), socioId: st.socioId, inicio: st.inicio, cuotas: st.cuotas, montoCuota: st.monto, deudaInicial: d, incluyeCuota: st.incluyeCuota, notas: ($('#npNotas', el) || {}).value || '', creado: now(), por: yo() });
+        toast(`✓ Plan creado para ${s.nombre}: ${st.cuotas} cuotas de ${clp(st.monto)}`, 'ok');
+        refreshOpenModal();
+      };
+    },
+  });
+}
+ACT['nuevo-plan'] = el=> openPlanForm(el.dataset.id || null);
+ACT['ver-plan'] = el=>{
+  const id = el.dataset.id;
+  openModal({
+    live: true, wide: true,
+    title: ()=>{ const p = getById('planes', id); const s = p && getById('socios', p.socioId); return 'Plan de pago · ' + esc(s ? s.nombre : ''); },
+    body: ()=>{
+      const p = getById('planes', id); if(!p) return '<div class="empty">Plan eliminado.</div>';
+      const r = planResumen(p);
+      const ms = planMarcas(p);
+      const filas = []; let k = 0, i = ymToIdx(p.inicio);
+      while(k < r.n && filas.length < 60){
+        const mes = idxToYm(i), mk = ms.find(a=> a.mes === mes);
+        if(mk && mk.estado === 'rechazado'){ filas.push({ mes, k: null, mk }); }
+        else { k++; filas.push({ mes, k, mk, ab: planAbono(p, k), cu: p.incluyeCuota ? tarifaDe(mes) : 0 }); }
+        i++;
+      }
+      return `<div class="tiles">
+        <div class="tile"><div class="num">${clp(p.deudaInicial)}</div><div class="lbl">Deuda del plan</div></div>
+        <div class="tile"><div class="num ok">${r.pagadas} / ${r.n}</div><div class="lbl">Cuotas descontadas</div></div>
+        <div class="tile"><div class="num">${clp(r.abonado)}</div><div class="lbl">Abonado</div></div>
+        <div class="tile"><div class="num ${r.saldo ? 'bad' : 'ok'}">${clp(r.saldo)}</div><div class="lbl">Saldo del plan</div></div></div>
+        ${p.notas ? `<div class="note small">${esc(p.notas)}</div>` : ''}
+        <div class="table-wrap"><table class="t"><thead><tr><th>Mes</th><th>Cuota</th><th class="r">Total</th><th>Estado</th></tr></thead><tbody>
+        ${filas.map(f=> `<tr><td>${esc(mesLabelCap(f.mes))}</td><td>${f.k ? f.k + ' de ' + r.n : '—'}</td><td class="r">${f.k ? clp(f.ab + f.cu) : ''}</td><td>${f.mk ? `<span class="chip ${PLAN_EST[f.mk.estado].chip}">${PLAN_EST[f.mk.estado].lbl}</span>` : (ymToIdx(f.mes) < ymToIdx(curYm()) ? '<span class="chip warn">Sin marcar</span>' : '<span class="chip neutral">Pendiente</span>')}</td></tr>`).join('')}
+        </tbody></table></div>
+        <div class="note small">Creado ${p.creado ? fdatetime(p.creado) : ''}${p.por ? ' por ' + esc(p.por) : ''}. Los pagos de los meses descontados quedan registrados en el historial del socio.</div>`;
+    },
+    foot: ()=>{ const p = getById('planes', id); return `<button class="btn danger" id="vpDel">${p && p.anulado ? 'Eliminar plan' : 'Anular plan'}</button><span style="flex:1"></span><button class="btn" data-act="close-modal">Cerrar</button>`; },
+    onMount: (el)=>{
+      const d = $('#vpDel', el);
+      if(d) d.onclick = async ()=>{
+        const p = getById('planes', id);
+        if(!p.anulado){
+          if(!await confirmar('¿Anular este plan? Los meses ya descontados se mantienen como pagos. Los meses siguientes dejarán de aparecer.', 'Anular', true)) return;
+          const x = Object.assign({}, p, { anulado: true }); upsert('planes', x); refreshOpenModal();
+        } else {
+          if(!await confirmar('¿Eliminar el plan? Los pagos ya registrados se mantienen.', 'Eliminar', true)) return;
+          closeModal(); removeRec('planes', id);
+        }
+      };
+    },
+  });
+};
 
 /* =====================================================================
    VISTA: PAGOS
