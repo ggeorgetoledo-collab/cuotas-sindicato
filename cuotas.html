@@ -2061,8 +2061,10 @@ VIEWS.ajustes = function(){
   </div>
   <div class="card">
     <h2>Zona de cuidado</h2>
-    <button class="btn danger" data-act="borrar-local">Borrar los datos de este equipo</button>
-    <p class="dim tiny" style="margin-top:8px">Solo borra la copia de este dispositivo (útil si lo vas a entregar). Si estás conectado, los datos siguen en el repositorio para los demás dirigentes.</p>
+    <button class="btn danger" data-act="borrar-todo">🗑️ Borrar todos los datos y empezar de nuevo</button>
+    <p class="dim tiny" style="margin-top:8px">Elimina socios, pagos, cuotas, cobros, ajustes y planes en este equipo <b>y también</b> en Google Drive y en el repositorio, si están conectados (los demás equipos quedan vacíos al sincronizar). Las conexiones se mantienen. Antes se descarga un respaldo por si acaso.</p>
+    <button class="btn" data-act="borrar-local" style="margin-top:10px">Borrar solo la copia de este equipo</button>
+    <p class="dim tiny" style="margin-top:8px">Útil si vas a entregar el equipo. Los datos siguen en Drive y en el repositorio.</p>
   </div>`;
 };
 VIEWS.ajustes.mount = function(v){
@@ -2075,7 +2077,11 @@ VIEWS.ajustes.mount = function(v){
       const st = data.app === 'cuotas-sindicales-respaldo' ? data.datos : data;
       if(!st || !Array.isArray(st.socios)) throw new Error('El archivo no es un respaldo de esta app.');
       if(!await confirmar(`El respaldo tiene ${st.socios.filter(x=> !x.del).length} socios y ${(st.pagos || []).filter(x=> !x.del).length} pagos. ¿Combinarlo con los datos actuales?`, 'Combinar')) return;
-      S = mergeStates(S, st);
+      // Si un registro del respaldo fue borrado aquí antes (por ejemplo al "empezar de nuevo"), el respaldo lo restaura
+      const t0 = now(), st2 = normalizeState(st);
+      COLS.forEach(c=> st2[c].forEach(x=>{ const cur = S[c].find(y=> y.id === x.id); if(cur && cur.del && !x.del) x.u = t0; }));
+      if(st2.config && (S.config.u || 0) >= (st2.config.u || 0) && !S.config.nombre) st2.config.u = t0;
+      S = mergeStates(S, st2);
       changed();
       toast('✓ Respaldo combinado', 'ok');
     }catch(err){ toast('⚠ ' + err.message, 'bad'); }
@@ -2094,6 +2100,33 @@ ACT['respaldo'] = ()=>{
   a.download = `respaldo-cuotas-${todayISO()}.json`;
   a.click();
   setTimeout(()=> URL.revokeObjectURL(a.href), 2000);
+};
+ACT['borrar-todo'] = async ()=>{
+  const n = live('socios').length, np = live('pagos').length;
+  const ok = await new Promise(resolve=>{
+    openModal({
+      title: ()=> 'Borrar todos los datos',
+      body: ()=> `<p>Se borrarán <b>${n} socios</b>, <b>${np} pagos</b> y todo lo demás (cuotas, cobros, ajustes, planes y el nombre del sindicato).</p>
+        ${connected() || (typeof gdEnabled === 'function' && gdEnabled()) ? '<div class="note warn small">También se borrarán en ' + [typeof gdEnabled === 'function' && gdEnabled() ? 'Google Drive' : '', connected() ? 'el repositorio (y para los demás dirigentes)' : ''].filter(Boolean).join(' y ') + '.</div>' : ''}
+        <p class="small">Antes de borrar se descargará un respaldo. Para confirmar escribe <b>BORRAR</b>:</p><input id="bzTxt" autocomplete="off">`,
+      foot: ()=> `<button class="btn" data-act="close-modal">Cancelar</button><button class="btn danger" id="bzOk">Borrar todo</button>`,
+      onMount: (el)=>{
+        $('#bzTxt', el).focus();
+        el._onClose = ()=> resolve(false);
+        $('#bzOk', el).onclick = ()=>{ if($('#bzTxt', el).value.trim().toUpperCase() !== 'BORRAR'){ toast('Escribe BORRAR para confirmar.', 'bad'); return; } el._onClose = null; closeModal(); resolve(true); };
+      },
+    });
+  });
+  if(!ok) return;
+  if(n || np) ACT['respaldo']();
+  const t = now();
+  COLS.forEach(c=> S[c].forEach(x=>{ if(!x.del){ x.del = true; x.u = t; } }));
+  S.config = Object.assign(emptyState().config, { u: t });
+  ['cs_portal_at'].forEach(k=> lsSet(k, null));
+  ui.sociosBusca = ''; ui.pagosBusca = '';
+  currentTab = 'inicio';
+  changed();
+  toast('✓ Datos borrados. Puedes empezar de nuevo.', 'ok');
 };
 ACT['borrar-local'] = async ()=>{
   if(!await confirmar('¿Borrar todos los datos de este dispositivo? ' + (connected() ? 'Seguirán disponibles en el repositorio para los otros dirigentes.' : '<b>No estás conectado: si no tienes respaldo, se perderán.</b>'), 'Borrar', true)) return;
