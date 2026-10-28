@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#2E7553">
+<title>Mis cuotas</title>
+<link rel="icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=Source+Sans+3:wght@400;600;700&display=swap">
+<style>
+  :root{
+    --primary:#2E7553; --primary-dark:#1F573D; --primary-light:#E6F2EC; --primary-line:#BFDCCD;
+    --bg:#F4F5F7; --card:#FFFFFF; --text:#1B2130; --dim:#586174; --border:#E2E5EA;
+    --ok:#1C6B44; --ok-bg:#E5F4EC; --warn:#7A4F00; --warn-bg:#FBF0D9; --bad:#A3241C; --bad-bg:#FBE9E7; --neutral-bg:#ECEEF1; --info:#1D5A88; --info-bg:#E4EFF8;
+    --radius:16px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --primary:#6FC49A; --primary-dark:#A3DCC0; --primary-light:rgba(111,196,154,0.16); --primary-line:rgba(111,196,154,0.4);
+      --bg:#15181E; --card:#1E222A; --text:#E8EAEF; --dim:#A3AAB8; --border:#2D323C;
+      --ok:#34D399; --ok-bg:rgba(52,211,153,0.14); --warn:#FBBF24; --warn-bg:rgba(251,191,36,0.14); --bad:#F87171; --bad-bg:rgba(248,113,113,0.14); --neutral-bg:rgba(255,255,255,0.06); --info:#7CC0F0; --info-bg:rgba(124,192,240,0.14);
+    }
+  }
+  *{ box-sizing:border-box; }
+  html{ -webkit-text-size-adjust:100%; }
+  body{ margin:0; background:var(--bg); color:var(--text); font-family:'Source Sans 3', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size:16px; line-height:1.45; }
+  main{ max-width:640px; margin:0 auto; padding:16px 16px 40px; }
+  h1, h2, .num, .brand{ font-family:Manrope,'Source Sans 3',sans-serif; }
+  .brand{ font-weight:800; color:var(--primary-dark); font-size:1rem; margin:4px 0 12px; display:flex; align-items:center; gap:8px; }
+  .brand i{ font-style:normal; width:28px; height:28px; border-radius:8px; background:var(--primary); color:#fff; display:inline-flex; align-items:center; justify-content:center; font-size:0.95rem; }
+  .card{ background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:16px; margin-bottom:14px; }
+  .hero h1{ margin:0; font-size:1.45rem; line-height:1.2; font-weight:800; overflow-wrap:anywhere; }
+  .dim{ color:var(--dim); } .small{ font-size:0.85rem; } .tiny{ font-size:0.78rem; }
+  .status{ border-radius:var(--radius); padding:16px; margin-bottom:14px; display:flex; gap:14px; align-items:center; }
+  .status .ico{ font-size:2.2rem; line-height:1; }
+  .status h2{ margin:0; font-size:1.15rem; }
+  .status.ok{ background:var(--ok-bg); color:var(--ok); }
+  .status.bad{ background:var(--bad-bg); color:var(--bad); }
+  .tiles{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px; }
+  .tile{ background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:12px 14px; min-width:0; }
+  .tile .num{ font-size:1.55rem; font-weight:800; line-height:1.15; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+  .tile .lbl{ color:var(--dim); font-size:0.8rem; font-weight:600; margin-top:2px; }
+  .num.ok{ color:var(--ok); } .num.bad{ color:var(--bad); }
+  h2{ font-size:1.08rem; margin:0 0 10px; font-weight:800; }
+  .row{ display:flex; justify-content:space-between; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid var(--border); }
+  .row:last-child{ border-bottom:none; }
+  .row .main{ min-width:0; } .row .title{ font-weight:600; overflow-wrap:anywhere; } .row .sub{ color:var(--dim); font-size:0.8rem; }
+  .val{ font-weight:800; white-space:nowrap; font-variant-numeric:tabular-nums; }
+  .val.ok{ color:var(--ok); } .val.bad{ color:var(--bad); }
+  .chip{ display:inline-block; padding:3px 9px; border-radius:999px; font-size:0.76rem; font-weight:700; white-space:nowrap; }
+  .chip.ok{ background:var(--ok-bg); color:var(--ok); } .chip.warn{ background:var(--warn-bg); color:var(--warn); } .chip.bad{ background:var(--bad-bg); color:var(--bad); }
+  .chip.info{ background:var(--info-bg); color:var(--info); } .chip.primary{ background:var(--primary-light); color:var(--primary-dark); } .chip.neutral{ background:var(--neutral-bg); color:var(--dim); }
+  .legend{ display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+  .yearbar{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px; }
+  .yearbar b{ font-family:Manrope,sans-serif; font-size:1.1rem; }
+  .ybtn{ width:44px; height:40px; border-radius:11px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-size:1.2rem; font-weight:800; cursor:pointer; }
+  .ybtn:disabled{ opacity:0.35; cursor:default; }
+  .months{ display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:6px; }
+  .mcell{ border-radius:10px; padding:8px 4px; text-align:center; font-size:0.76rem; font-weight:700; line-height:1.2; }
+  .mcell b{ display:block; font-size:0.9rem; text-transform:capitalize; }
+  .mcell.pagado{ background:var(--ok-bg); color:var(--ok); } .mcell.parcial{ background:var(--warn-bg); color:var(--warn); } .mcell.adeuda{ background:var(--bad-bg); color:var(--bad); }
+  .mcell.porvencer{ background:var(--info-bg); color:var(--info); } .mcell.adelantado{ background:var(--primary-light); color:var(--primary-dark); } .mcell.exento, .mcell.nosocio{ background:var(--neutral-bg); color:var(--dim); }
+  details summary{ cursor:pointer; color:var(--primary); font-weight:700; font-size:0.9rem; padding:8px 0 2px; list-style:none; }
+  details summary::-webkit-details-marker{ display:none; }
+  .msg{ text-align:center; padding:34px 20px; }
+  .msg .icon{ font-size:2.6rem; }
+  .msg h1{ font-size:1.25rem; margin:10px 0 6px; }
+  .pinbox{ text-align:center; padding:26px 18px; }
+  .pinbox h1{ font-size:1.3rem; margin:8px 0 4px; }
+  .pin-in{ font-family:Manrope,monospace; font-size:2rem; font-weight:800; letter-spacing:0.5em; text-align:center; width:220px; max-width:100%; padding:10px 0 10px 0.5em; border-radius:14px; border:2px solid var(--border); background:var(--bg); color:var(--text); margin:16px auto 10px; display:block; }
+  .pin-in:focus{ outline:none; border-color:var(--primary); }
+  .btn{ font:inherit; font-weight:800; min-height:48px; padding:10px 22px; border-radius:13px; border:none; background:var(--primary); color:#fff; cursor:pointer; }
+  .btn:disabled{ opacity:0.5; }
+  .btn.sec{ background:var(--bg); color:var(--text); border:1px solid var(--border); min-height:40px; font-size:0.9rem; padding:8px 14px; }
+  .check{ display:inline-flex; align-items:center; gap:8px; font-size:0.9rem; color:var(--dim); margin-top:6px; cursor:pointer; }
+  .check input{ width:18px; height:18px; accent-color:var(--primary); }
+  .err{ color:var(--bad); font-weight:700; min-height:1.4em; margin-top:8px; }
+  .note{ font-size:0.8rem; color:var(--dim); text-align:center; margin-top:18px; line-height:1.5; }
+  .actions{ display:flex; justify-content:center; gap:8px; flex-wrap:wrap; margin-top:16px; }
+  @media (prefers-color-scheme: dark){ .btn{ color:#10141a; } .brand i{ color:#10141a; } }
+</style>
+</head>
+<body>
+<main id="app"></main>
+<script>
+(function(){
+  'use strict';
+  const app = document.getElementById('app');
+  const ITER = 120000;
+  const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const MESES_C = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  const TE = new TextEncoder(), TD = new TextDecoder();
+  let session = { token: '', fileId: '', data: null, entry: null, payload: null, year: new Date().getFullYear() };
+
+  function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, c=> ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  function clp(n){ n = Math.round(Number(n) || 0); return (n < 0 ? '-$' : '$') + String(Math.abs(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); }
+  function pad2(n){ return String(n).padStart(2, '0'); }
+  function ymToIdx(ym){ const m = String(ym || '').match(/^(\d{4})-(\d{2})/); return m ? Number(m[1]) * 12 + Number(m[2]) - 1 : NaN; }
+  function mesLabel(ym, corto){ const i = ymToIdx(ym); if(isNaN(i)) return ''; return (corto ? MESES_C : MESES)[i % 12] + ' ' + Math.floor(i / 12); }
+  function fdate(iso){ const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[3]}/${m[2]}/${m[1]}` : ''; }
+  function fdatetime(iso){ const d = new Date(iso); if(isNaN(d)) return ''; return `${pad2(d.getDate())}/${pad2(d.getMonth()+1)}/${d.getFullYear()} a las ${pad2(d.getHours())}:${pad2(d.getMinutes())}`; }
+  function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
+  function lsSet(k, v){ try{ if(v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); }catch(e){} }
+  function b64ToBytes(b64){ const bin = atob(b64); const out = new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) out[i] = bin.charCodeAt(i); return out; }
+  async function sha(str){ return new Uint8Array(await crypto.subtle.digest('SHA-256', TE.encode(str))); }
+  function hex(bytes){ return Array.from(bytes, b=> b.toString(16).padStart(2,'0')).join(''); }
+  async function deriveKey(token, pin){
+    const base = await crypto.subtle.importKey('raw', TE.encode(token + ':' + pin), 'PBKDF2', false, ['deriveKey']);
+    const salt = (await sha('cs-salt:' + token)).slice(0, 16);
+    return crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: ITER, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+  }
+  function brand(){ return `<div class="brand"><i>✊</i>${esc(session.data && session.data.sindicato ? session.data.sindicato : 'Mis cuotas')}</div>`; }
+  function message(icon, title, text){
+    app.innerHTML = `${brand()}<div class="card msg"><div class="icon">${icon}</div><h1>${esc(title)}</h1><div class="dim">${esc(text)}</div></div>`;
+  }
+
+  /* ---------- Pantalla de PIN ---------- */
+  function askPin(errMsg){
+    const bloqueo = Number(lsGet('cp_lock::' + session.token) || 0);
+    app.innerHTML = `${brand()}<div class="card pinbox">
+      <div style="font-size:2.4rem">🔒</div>
+      <h1>Ingresa tu PIN</h1>
+      <div class="dim small">Son los 4 dígitos que te entregó la directiva junto con tu tarjeta.</div>
+      <input id="pin" class="pin-in" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="one-time-code" aria-label="PIN de 4 dígitos">
+      <label class="check"><input type="checkbox" id="rec"> Recordar en este celular</label>
+      <div class="err" id="err">${esc(errMsg || '')}</div>
+      <button class="btn" id="go" style="margin-top:6px;width:220px;max-width:100%">Ver mis cuotas</button>
+    </div>
+    <div class="note">Tus datos viajan cifrados: solo se pueden abrir con tu tarjeta y tu PIN.</div>`;
+    const inp = document.getElementById('pin'), go = document.getElementById('go'), err = document.getElementById('err');
+    if(Date.now() < bloqueo){ go.disabled = true; inp.disabled = true; const t = setInterval(()=>{ const s = Math.ceil((bloqueo - Date.now()) / 1000); if(s <= 0){ clearInterval(t); askPin(''); } else err.textContent = `Demasiados intentos. Espera ${s} s.`; }, 500); return; }
+    inp.focus();
+    inp.addEventListener('input', ()=>{ inp.value = inp.value.replace(/\D/g, '').slice(0, 4); err.textContent = ''; if(inp.value.length === 4) tryPin(); });
+    go.onclick = tryPin;
+    async function tryPin(){
+      const pin = inp.value;
+      if(pin.length !== 4){ err.textContent = 'El PIN tiene 4 dígitos.'; return; }
+      go.disabled = true; go.textContent = 'Abriendo…';
+      const ok = await open(pin);
+      if(ok){
+        lsSet('cp_fail::' + session.token, null);
+        if(document.getElementById('rec') && document.getElementById('rec').checked) lsSet('cp_pin::' + session.token, pin);
+        render();
+      } else {
+        const n = Number(lsGet('cp_fail::' + session.token) || 0) + 1;
+        lsSet('cp_fail::' + session.token, String(n));
+        if(n >= 5){ lsSet('cp_lock::' + session.token, String(Date.now() + 60000 * Math.min(10, n - 4))); }
+        askPin('PIN incorrecto. Revisa e inténtalo de nuevo.');
+      }
+    }
+  }
+  async function open(pin){
+    try{
+      const key = await deriveKey(session.token, pin);
+      const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64ToBytes(session.entry.iv) }, key, b64ToBytes(session.entry.ct));
+      session.payload = JSON.parse(TD.decode(plain));
+      return true;
+    }catch(e){ return false; }
+  }
+
+  /* ---------- Cálculos (con la fecha de hoy) ---------- */
+  function dueIdx(p){ const d = new Date(); const cur = d.getFullYear() * 12 + d.getMonth(); return d.getDate() >= (p.dv || 10) ? cur : cur - 1; }
+  function cuenta(p){
+    const due = dueIdx(p);
+    let deuda = 0; const meses = [], pend = [];
+    p.items.forEach(it=>{
+      const i = ymToIdx(it.m);
+      it.idx = i; it.venc = i <= due;
+      it.e = it.mo <= 0 ? 'exento' : (it.p >= it.mo ? 'pagado' : it.p > 0 ? 'parcial' : 'pendiente');
+      if(it.venc && it.mo > 0 && it.e !== 'pagado'){ deuda += it.mo - it.p; pend.push(it); if(it.t === 'cuota') meses.push(it.m); }
+    });
+    return { deuda, meses, pend, due };
+  }
+  function gridYear(p, y, due){
+    const start = ymToIdx(p.ini), end = p.fin ? ymToIdx(p.fin) : Infinity;
+    const out = [];
+    for(let m = 1; m <= 12; m++){
+      const ym = y + '-' + pad2(m), i = ymToIdx(ym);
+      const it = p.items.find(x=> x.m === ym && (x.t === 'cuota' || x.t === 'exento'));
+      let st, txt;
+      if(i < start || i > end){ st = 'nosocio'; txt = '—'; }
+      else if(!it){ st = i > due ? 'porvencer' : 'exento'; txt = i > due ? 'Por vencer' : 'Sin cuota'; }
+      else if(it.t === 'exento'){ st = 'exento'; txt = 'Exento'; }
+      else if(it.e === 'pagado'){ st = i > due ? 'adelantado' : 'pagado'; txt = i > due ? 'Adelantado' : 'Pagado'; }
+      else if(i > due){ st = 'porvencer'; txt = it.e === 'parcial' ? 'Abono ' + clp(it.p) : 'Por vencer'; }
+      else if(it.e === 'parcial'){ st = 'parcial'; txt = 'Debe ' + clp(it.mo - it.p); }
+      else { st = 'adeuda'; txt = 'Debe ' + clp(it.mo); }
+      out.push({ ym, st, txt });
+    }
+    return out;
+  }
+
+  /* ---------- Estado de cuenta ---------- */
+  function render(){
+    const p = session.payload;
+    const c = cuenta(p);
+    const y = session.year;
+    const minY = Math.floor(ymToIdx(p.ini) / 12), maxY = new Date().getFullYear() + 1;
+    const grid = gridYear(p, y, c.due);
+    const extras = p.items.filter(it=> it.t === 'cobro' || it.t === 'cargo');
+    const proxIdx = c.due + 1;
+    const pm = MESES[proxIdx % 12]; const prox = pm.charAt(0).toUpperCase() + pm.slice(1) + ' · vence el ' + (p.dv || 10);
+    const desc = p.desc || [];
+    app.innerHTML = `${brand()}
+    <div class="card hero"><div class="dim small">Estado de cuenta de</div><h1>${esc(p.nombre)}</h1>${p.rut ? `<div class="dim small">${esc(p.rut)}</div>` : ''}${p.fin ? `<div class="small" style="margin-top:4px"><span class="chip neutral">Retiro: ${esc(mesLabel(p.fin))}</span></div>` : ''}</div>
+    ${c.deuda > 0
+      ? `<div class="status bad"><div class="ico">⚠️</div><div><h2>Tienes ${clp(c.deuda)} pendiente</h2><div class="small">${c.meses.length ? (c.meses.length === 1 ? 'Adeudas 1 mes: ' : `Adeudas ${c.meses.length} meses: `) + esc(c.meses.map(m=> mesLabel(m, true)).join(', ')) : 'Tienes cobros pendientes.'}</div></div></div>`
+      : `<div class="status ok"><div class="ico">✅</div><div><h2>¡Estás al día!</h2><div class="small">No tienes cuotas vencidas pendientes.</div></div></div>`}
+    <div class="tiles">
+      <div class="tile"><div class="num ${c.deuda ? 'bad' : 'ok'}">${clp(c.deuda)}</div><div class="lbl">Deuda vencida</div></div>
+      <div class="tile"><div class="num">${clp(p.cuota)}</div><div class="lbl">Cuota mensual</div></div>
+      <div class="tile"><div class="num">${c.meses.length}</div><div class="lbl">Meses adeudados</div></div>
+      <div class="tile"><div class="num" style="font-size:1.05rem">${esc(prox)}</div><div class="lbl">Próxima cuota</div></div>
+    </div>
+    <div class="card">
+      <div class="yearbar"><button class="ybtn" id="yPrev" ${y <= minY ? 'disabled' : ''} aria-label="Año anterior">‹</button><b>Cuotas ${y}</b><button class="ybtn" id="yNext" ${y >= maxY ? 'disabled' : ''} aria-label="Año siguiente">›</button></div>
+      <div class="months">${grid.map(m=> `<div class="mcell ${m.st}"><b>${MESES_C[Number(m.ym.slice(5)) - 1]}</b>${esc(m.txt)}</div>`).join('')}</div>
+      <div class="legend"><span class="chip ok">Pagado</span><span class="chip warn">Parcial</span><span class="chip bad">Adeuda</span><span class="chip info">Por vencer</span><span class="chip primary">Adelantado</span><span class="chip neutral">Exento</span></div>
+    </div>
+    ${c.pend.length ? `<div class="card"><h2>Detalle de lo pendiente</h2>${c.pend.map(it=> `<div class="row"><div class="main"><div class="title">${esc(it.c)}</div>${it.p ? `<div class="sub">Abonado ${clp(it.p)} de ${clp(it.mo)}</div>` : ''}</div><div class="val bad">${clp(it.mo - it.p)}</div></div>`).join('')}</div>` : ''}
+    <div class="card"><h2>Mis pagos</h2>${p.pagos.length ? list(p.pagos, x=> `<div class="row"><div class="main"><div class="title">${fdate(x.f)}</div><div class="sub">${esc(x.me || '')}</div></div><div class="val ok">${clp(x.mo)}</div></div>`, 6) : '<div class="dim">Aún no hay pagos registrados.</div>'}</div>
+    ${extras.length ? `<div class="card"><h2>Cobros extraordinarios</h2>${extras.map(it=> `<div class="row"><div class="main"><div class="title">${esc(it.c)}</div><div class="sub">${esc(mesLabel(it.m))}</div></div><div style="text-align:right"><div class="val">${clp(it.mo)}</div>${it.e === 'pagado' ? '<span class="chip ok">Pagado</span>' : it.e === 'parcial' ? '<span class="chip warn">Parcial</span>' : it.venc ? '<span class="chip bad">Pendiente</span>' : '<span class="chip info">Por vencer</span>'}</div></div>`).join('')}</div>` : ''}
+    ${desc.length ? `<div class="card"><h2>Descuentos</h2>${desc.map(d=> `<div class="row"><div class="main"><div class="title">${esc(d.c)}</div><div class="sub">${esc(mesLabel(d.m))}</div></div><div class="val ok">−${clp(d.mo)}</div></div>`).join('')}</div>` : ''}
+    <div class="note">Información actualizada el ${esc(fdatetime(p.generado || session.data.generado))}. Los pagos recientes pueden tardar en aparecer.<br>Los pagos se imputan primero a la deuda más antigua. Ante cualquier duda, consulta con la directiva.</div>
+    <div class="actions"><button class="btn sec" id="lock">🔒 Salir${lsGet('cp_pin::' + session.token) ? ' y olvidar PIN' : ''}</button></div>`;
+    const yp = document.getElementById('yPrev'), yn = document.getElementById('yNext');
+    yp.onclick = ()=>{ session.year--; render(); };
+    yn.onclick = ()=>{ session.year++; render(); };
+    document.getElementById('lock').onclick = ()=>{ lsSet('cp_pin::' + session.token, null); session.payload = null; askPin(''); };
+  }
+  function list(items, fn, visible){
+    const first = items.slice(0, visible).map(fn).join('');
+    if(items.length <= visible) return first;
+    return first + `<details><summary>Ver ${items.length - visible} más</summary>${items.slice(visible).map(fn).join('')}</details>`;
+  }
+
+  /* ---------- Carga ---------- */
+  async function load(){
+    const params = new URLSearchParams(location.hash.slice(1));
+    const token = (params.get('t') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const fileId = (params.get('f') || '').toLowerCase().replace(/[^a-z0-9-]/g, '');
+    session = { token, fileId, data: null, entry: null, payload: null, year: new Date().getFullYear() };
+    if(!token || !fileId){ message('🪪', 'Escanea el código QR de tu tarjeta', 'Apunta la cámara de tu celular al código QR de tu tarjeta de socio y se abrirá esta página.'); return; }
+    if(!window.crypto || !crypto.subtle){ message('⚠️', 'Tu navegador no puede abrir esta página', 'Prueba abriendo el enlace en Chrome o Safari actualizados.'); return; }
+    message('⏳', 'Cargando…', '');
+    try{
+      const r = await fetch(`portal-${fileId}.json?_=${Date.now()}`, { cache: 'no-store' });
+      if(r.status === 404){ message('📭', 'Todavía no hay datos publicados', 'La directiva aún no publica los estados de cuenta. Vuelve a intentarlo más tarde.'); return; }
+      if(!r.ok) throw new Error('HTTP ' + r.status);
+      session.data = await r.json();
+    }catch(e){ message('📶', 'No se pudo cargar', 'Revisa tu conexión a internet e inténtalo de nuevo.'); return; }
+    const id = hex(await sha('cs-id:' + token)).slice(0, 32);
+    session.entry = session.data.entries && session.data.entries[id];
+    if(!session.entry){ message('🤔', 'No encontramos tu tarjeta', 'Puede que tu tarjeta sea nueva y aún no esté publicada, o que haya sido reemplazada. Consulta con la directiva.'); return; }
+    const saved = lsGet('cp_pin::' + token);
+    if(saved && await open(saved)){ render(); return; }
+    if(saved) lsSet('cp_pin::' + token, null);
+    askPin('');
+  }
+  window.addEventListener('hashchange', load);
+  load();
+})();
+</script>
+</body>
+</html>

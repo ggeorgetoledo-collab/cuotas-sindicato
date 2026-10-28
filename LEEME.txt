@@ -1,0 +1,12 @@
+CUOTAS SINDICALES - cómo publicarla
+
+1. Crea un repositorio PÚBLICO en GitHub (ej. "cuotas-sindicato") y sube todos estos archivos.
+2. Settings -> Pages -> rama "main" -> Save. La app queda en:
+   https://TU-USUARIO.github.io/cuotas-sindicato/cuotas.html
+3. Crea una llave: Settings (perfil) -> Developer settings -> Personal access tokens -> Fine-grained tokens.
+   Solo ese repositorio, permiso "Contents: Read and write".
+4. Abre cuotas.html -> Ajustes -> Configurar repositorio. Pega la llave y define la clave compartida.
+5. Ajustes -> Invitar a otro dirigente: envía el enlace por privado.
+6. Portal -> Publicar ahora, e imprime tarjetas QR y hoja de PINs (por separado).
+
+Los datos se guardan cifrados en el repositorio (datos-XXXX.enc.json y portal-XXXX.json).

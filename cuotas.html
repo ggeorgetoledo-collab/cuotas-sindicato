@@ -1,0 +1,1945 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#2E7553">
+<title>Cuotas Sindicales</title>
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=Source+Sans+3:wght@400;600;700&display=swap">
+<script>
+  window.PALETAS = {
+    bosque:   ['Bosque',    '#2E7553', '#1F573D', '#E6F2EC', '#BFDCCD', '#6FC49A', '#A3DCC0'],
+    indigo:   ['Índigo',    '#4453C4', '#2F3B99', '#ECEEFB', '#C9CEF2', '#9AA6F2', '#C3CAF7'],
+    oceano:   ['Océano',    '#1D6A88', '#134E66', '#E4F0F5', '#BBD7E3', '#6BB8D6', '#A3D4E8'],
+    ciruela:  ['Ciruela',   '#764689', '#573266', '#F2EBF5', '#DCC8E4', '#C29AD4', '#DCC3E6'],
+    terracota:['Terracota', '#A9512F', '#7F3B21', '#F8EBE5', '#EBCBBE', '#E39A7C', '#EFC0AC'],
+    rosa:     ['Rosa',      '#B4386C', '#86264F', '#FBEAF1', '#F0C6D8', '#EE8FB5', '#F5BCD3'],
+    grafito:  ['Grafito',   '#3A4250', '#232933', '#ECEEF1', '#CDD2DA', '#AEB6C4', '#D2D7E0'],
+  };
+  window.aplicarTema = function(){
+    var tema = 'claro', pal = 'bosque';
+    try{ tema = localStorage.getItem('cs_tema') || 'claro'; pal = localStorage.getItem('cs_paleta') || 'bosque'; }catch(e){}
+    var v = window.PALETAS[pal] || window.PALETAS.bosque;
+    var dark = tema === 'oscuro';
+    var de = document.documentElement;
+    de.setAttribute('data-theme', dark ? 'dark' : 'light');
+    var rgba = function(h, a){ return 'rgba(' + parseInt(h.slice(1,3),16) + ',' + parseInt(h.slice(3,5),16) + ',' + parseInt(h.slice(5,7),16) + ',' + a + ')'; };
+    de.style.setProperty('--primary', dark ? v[5] : v[1]);
+    de.style.setProperty('--primary-dark', dark ? v[6] : v[2]);
+    de.style.setProperty('--primary-light', dark ? rgba(v[5], 0.16) : v[3]);
+    de.style.setProperty('--primary-line', dark ? rgba(v[5], 0.4) : v[4]);
+    var m = document.querySelector('meta[name="theme-color"]'); if(m) m.setAttribute('content', dark ? '#15181E' : v[1]);
+  };
+  window.aplicarTema();
+</script>
+<style>
+:root{
+  --primary:#2E7553; --primary-dark:#1F573D; --primary-light:#E6F2EC; --primary-line:#BFDCCD;
+  --bg:#F4F5F7; --card:#FFFFFF; --text:#1B2130; --dim:#586174; --border:#E2E5EA; --input:#FFFFFF;
+  --ok:#1C6B44; --ok-bg:#E5F4EC; --warn:#7A4F00; --warn-bg:#FBF0D9; --bad:#A3241C; --bad-bg:#FBE9E7; --neutral-bg:#ECEEF1; --info:#1D5A88; --info-bg:#E4EFF8;
+  --radius:14px;
+}
+:root[data-theme="dark"]{
+  --bg:#15181E; --card:#1E222A; --text:#E8EAEF; --dim:#A3AAB8; --border:#2D323C; --input:#171A20;
+  --ok:#34D399; --ok-bg:rgba(52,211,153,0.14); --warn:#FBBF24; --warn-bg:rgba(251,191,36,0.14); --bad:#F87171; --bad-bg:rgba(248,113,113,0.14); --neutral-bg:rgba(255,255,255,0.06); --info:#7CC0F0; --info-bg:rgba(124,192,240,0.14);
+}
+*{ box-sizing:border-box; }
+html{ -webkit-text-size-adjust:100%; }
+body{ margin:0; background:var(--bg); color:var(--text); font-family:'Source Sans 3', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size:16px; line-height:1.45; }
+h1,h2,h3,.num,.brand{ font-family:Manrope,'Source Sans 3',sans-serif; }
+button{ font:inherit; }
+.topbar{ position:sticky; top:0; z-index:20; background:var(--card); border-bottom:1px solid var(--border); }
+.topbar-in{ max-width:980px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 16px 6px; }
+.brand{ font-weight:800; font-size:1.05rem; color:var(--primary-dark); display:flex; align-items:center; gap:8px; min-width:0; }
+.brand span:last-child{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.brand-ico{ width:30px; height:30px; border-radius:9px; background:var(--primary); color:#fff; display:inline-flex; align-items:center; justify-content:center; font-size:1rem; flex:none; }
+.sync-chip{ border:1px solid var(--border); background:var(--bg); color:var(--dim); border-radius:999px; padding:5px 11px; font-size:0.8rem; font-weight:700; cursor:pointer; white-space:nowrap; flex:none; }
+.sync-chip.ok{ color:var(--ok); background:var(--ok-bg); border-color:transparent; }
+.sync-chip.busy{ color:var(--info); background:var(--info-bg); border-color:transparent; }
+.sync-chip.bad{ color:var(--bad); background:var(--bad-bg); border-color:transparent; }
+.tabs{ max-width:980px; margin:0 auto; display:flex; gap:4px; overflow-x:auto; padding:0 12px 8px; scrollbar-width:none; }
+.tabs::-webkit-scrollbar{ display:none; }
+.tabs button{ flex:none; border:none; background:transparent; color:var(--dim); font-weight:700; font-size:0.92rem; padding:8px 12px; border-radius:10px; cursor:pointer; white-space:nowrap; }
+.tabs button.active{ background:var(--primary-light); color:var(--primary-dark); }
+main{ max-width:980px; margin:0 auto; padding:16px 16px 60px; }
+.card{ background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:16px; margin-bottom:14px; }
+.card > h2:first-child, .card > .card-head:first-child{ margin-top:0; }
+h2{ font-size:1.08rem; margin:0 0 10px; font-weight:800; }
+h3{ font-size:0.98rem; margin:14px 0 8px; font-weight:700; }
+.card-head{ display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
+.card-head h2{ margin:0; }
+.dim{ color:var(--dim); } .small{ font-size:0.85rem; } .tiny{ font-size:0.78rem; }
+.tiles{ display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:10px; margin-bottom:14px; }
+@media (max-width:720px){ .tiles{ grid-template-columns:repeat(2, minmax(0,1fr)); } }
+.tile{ background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:12px 14px; min-width:0; }
+.tile .num{ font-size:1.55rem; font-weight:800; line-height:1.15; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+.tile .lbl{ color:var(--dim); font-size:0.8rem; font-weight:600; margin-top:2px; }
+.tile.accent{ background:var(--primary); border-color:var(--primary); color:#fff; }
+.tile.accent .lbl{ color:rgba(255,255,255,0.88); }
+:root[data-theme="dark"] .tile.accent{ color:#10141a; } :root[data-theme="dark"] .tile.accent .lbl{ color:rgba(16,20,26,0.75); }
+.num.ok{ color:var(--ok); } .num.bad{ color:var(--bad); }
+.btn{ display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:42px; padding:8px 14px; border-radius:11px; border:1px solid var(--border); background:var(--card); color:var(--text); font-weight:700; cursor:pointer; text-decoration:none; font-size:0.95rem; }
+.btn.primary{ background:var(--primary); border-color:var(--primary); color:#fff; }
+:root[data-theme="dark"] .btn.primary{ color:#10141a; }
+.btn.danger{ color:var(--bad); border-color:var(--bad-bg); background:var(--bad-bg); }
+.btn.ghost{ background:transparent; border-color:transparent; color:var(--primary); padding:6px 8px; min-height:34px; }
+.btn.sm{ min-height:34px; padding:5px 10px; font-size:0.85rem; border-radius:9px; }
+.btn:disabled{ opacity:0.5; cursor:default; }
+.btn-row{ display:flex; flex-wrap:wrap; gap:8px; }
+.quick{ display:grid; grid-template-columns:repeat(auto-fit, minmax(180px,1fr)); gap:10px; margin-bottom:14px; }
+.quick .btn{ min-height:52px; font-size:1rem; }
+label.f{ display:flex; flex-direction:column; gap:4px; font-size:0.82rem; font-weight:700; color:var(--dim); min-width:0; }
+input, select, textarea{ font:inherit; font-size:1rem; color:var(--text); background:var(--input); border:1px solid var(--border); border-radius:10px; padding:9px 11px; width:100%; min-width:0; }
+input:focus, select:focus, textarea:focus{ outline:2px solid var(--primary-line); border-color:var(--primary); }
+textarea{ min-height:90px; resize:vertical; }
+.grid2{ display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:10px 12px; }
+.grid3{ display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:10px 12px; }
+@media (max-width:600px){ .grid2, .grid3{ grid-template-columns:1fr; } }
+.span2{ grid-column:1 / -1; }
+.check{ display:flex; align-items:center; gap:8px; font-weight:600; cursor:pointer; }
+.check input{ width:20px; height:20px; flex:none; accent-color:var(--primary); }
+.row{ display:flex; justify-content:space-between; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--border); }
+.row:last-child{ border-bottom:none; }
+.row .main{ min-width:0; flex:1; }
+.row .title{ font-weight:700; overflow-wrap:anywhere; }
+.row .sub{ color:var(--dim); font-size:0.82rem; }
+.row.click{ cursor:pointer; }
+.row.click:hover .title{ color:var(--primary-dark); }
+.val{ font-weight:800; white-space:nowrap; font-variant-numeric:tabular-nums; }
+.val.bad{ color:var(--bad); } .val.ok{ color:var(--ok); }
+.chip{ display:inline-block; padding:3px 9px; border-radius:999px; font-size:0.78rem; font-weight:700; white-space:nowrap; }
+.chip.ok{ background:var(--ok-bg); color:var(--ok); }
+.chip.warn{ background:var(--warn-bg); color:var(--warn); }
+.chip.bad{ background:var(--bad-bg); color:var(--bad); }
+.chip.info{ background:var(--info-bg); color:var(--info); }
+.chip.neutral{ background:var(--neutral-bg); color:var(--dim); }
+.chip.primary{ background:var(--primary-light); color:var(--primary-dark); }
+.toolbar{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:10px; }
+.toolbar input[type=search]{ flex:1 1 200px; }
+.toolbar select{ width:auto; flex:0 1 auto; }
+.seg{ display:inline-flex; background:var(--bg); border:1px solid var(--border); border-radius:11px; padding:3px; gap:2px; flex-wrap:wrap; }
+.seg button{ border:none; background:transparent; color:var(--dim); font-weight:700; font-size:0.85rem; padding:6px 10px; border-radius:8px; cursor:pointer; }
+.seg button.active{ background:var(--card); color:var(--primary-dark); box-shadow:0 1px 2px rgba(0,0,0,0.12); }
+.empty{ color:var(--dim); text-align:center; padding:18px 8px; }
+.note{ background:var(--bg); border:1px solid var(--border); border-radius:11px; padding:10px 12px; font-size:0.88rem; color:var(--dim); margin:10px 0; }
+.note.warn{ background:var(--warn-bg); color:var(--warn); border-color:transparent; }
+.note.bad{ background:var(--bad-bg); color:var(--bad); border-color:transparent; }
+.note.ok{ background:var(--ok-bg); color:var(--ok); border-color:transparent; }
+.table-wrap{ overflow-x:auto; border:1px solid var(--border); border-radius:11px; }
+table.t{ width:100%; border-collapse:collapse; font-size:0.9rem; }
+table.t th, table.t td{ padding:8px 10px; border-bottom:1px solid var(--border); text-align:left; vertical-align:middle; }
+table.t th{ font-size:0.78rem; color:var(--dim); font-weight:800; background:var(--bg); position:sticky; top:0; white-space:nowrap; }
+table.t tr:last-child td{ border-bottom:none; }
+table.t td.r, table.t th.r{ text-align:right; font-variant-numeric:tabular-nums; }
+table.t input{ padding:6px 8px; font-size:0.95rem; }
+table.t tr.done td{ opacity:0.55; }
+.months{ display:grid; grid-template-columns:repeat(6, minmax(0,1fr)); gap:6px; }
+@media (max-width:420px){ .months{ grid-template-columns:repeat(4, minmax(0,1fr)); } }
+.mcell{ border-radius:10px; padding:7px 4px; text-align:center; font-size:0.78rem; font-weight:700; line-height:1.2; border:1px solid transparent; }
+.mcell b{ display:block; font-size:0.85rem; text-transform:capitalize; }
+.mcell.pagado{ background:var(--ok-bg); color:var(--ok); }
+.mcell.parcial{ background:var(--warn-bg); color:var(--warn); }
+.mcell.adeuda{ background:var(--bad-bg); color:var(--bad); }
+.mcell.porvencer{ background:var(--info-bg); color:var(--info); }
+.mcell.adelantado{ background:var(--primary-light); color:var(--primary-dark); }
+.mcell.exento, .mcell.nosocio{ background:var(--neutral-bg); color:var(--dim); }
+.legend{ display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+.yearbar{ display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+.yearbar b{ font-family:Manrope,sans-serif; font-size:1.05rem; min-width:52px; text-align:center; }
+.modal-bg{ position:fixed; inset:0; z-index:50; background:rgba(15,18,25,0.5); display:flex; align-items:flex-start; justify-content:center; overflow-y:auto; padding:24px 12px; }
+.modal{ width:100%; max-width:640px; background:var(--card); color:var(--text); border-radius:18px; padding:18px; box-shadow:0 20px 50px rgba(0,0,0,0.25); }
+.modal.wide{ max-width:860px; }
+.modal-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:10px; margin-bottom:12px; }
+.modal-head h2{ margin:0; font-size:1.2rem; }
+.x{ width:38px; height:38px; flex:none; border-radius:10px; border:1px solid var(--border); background:var(--bg); color:var(--text); cursor:pointer; font-size:1.1rem; }
+.modal-foot{ display:flex; justify-content:flex-end; flex-wrap:wrap; gap:8px; margin-top:16px; }
+@media (max-width:600px){ .modal-bg{ padding:0; align-items:stretch; } .modal{ border-radius:0; min-height:100%; } }
+#toasts{ position:fixed; left:50%; bottom:18px; transform:translateX(-50%); z-index:80; display:flex; flex-direction:column; gap:8px; width:min(92vw, 460px); }
+.toast{ background:#1B2130; color:#fff; border-radius:12px; padding:11px 14px; font-weight:600; font-size:0.92rem; display:flex; gap:10px; align-items:flex-start; box-shadow:0 8px 24px rgba(0,0,0,0.25); }
+.toast span{ flex:1; }
+.toast button{ background:transparent; border:none; color:#fff; cursor:pointer; font-size:1rem; padding:0 2px; }
+.toast.bad{ background:#8E1F18; } .toast.ok{ background:#1F573D; }
+.preview{ background:var(--primary-light); color:var(--primary-dark); border-radius:11px; padding:10px 12px; font-size:0.88rem; margin-top:10px; }
+.picker-list{ max-height:280px; overflow-y:auto; border:1px solid var(--border); border-radius:11px; margin-top:6px; }
+.picker-list button{ display:flex; justify-content:space-between; gap:8px; width:100%; text-align:left; border:none; border-bottom:1px solid var(--border); background:transparent; color:var(--text); padding:10px 12px; cursor:pointer; }
+.picker-list button:last-child{ border-bottom:none; }
+.picker-list button:hover, .picker-list button.sel{ background:var(--primary-light); }
+.sel-socio{ display:flex; align-items:center; justify-content:space-between; gap:10px; border:1px solid var(--primary-line); background:var(--primary-light); border-radius:11px; padding:10px 12px; }
+.qrbox{ background:#fff; border-radius:12px; padding:10px; width:200px; max-width:100%; }
+.qrbox svg{ width:100%; height:auto; display:block; }
+.pin{ font-family:Manrope,monospace; font-size:1.6rem; font-weight:800; letter-spacing:0.2em; }
+.copy-box{ font-family:ui-monospace,Menlo,Consolas,monospace; font-size:0.78rem; word-break:break-all; background:var(--bg); border:1px solid var(--border); border-radius:10px; padding:10px; max-height:120px; overflow:auto; }
+.steps{ margin:6px 0 0; padding-left:20px; } .steps li{ margin:4px 0; }
+details.adv > summary{ cursor:pointer; color:var(--primary); font-weight:700; padding:6px 0; }
+.kv{ display:grid; grid-template-columns:auto 1fr; gap:4px 14px; font-size:0.92rem; }
+.kv dt{ color:var(--dim); font-weight:600; } .kv dd{ margin:0; font-weight:700; overflow-wrap:anywhere; }
+.welcome{ max-width:560px; margin:30px auto; }
+.welcome .big{ font-size:2.6rem; }
+#printArea{ display:none; }
+@media print{
+  body > *:not(#printArea){ display:none !important; }
+  #printArea{ display:block !important; color:#000; font-family:Calibri, Carlito, Arial, sans-serif; font-size:11pt; }
+  body{ background:#fff; }
+  @page{ size:letter; margin:12mm; }
+  .p-cards{ display:grid; grid-template-columns:repeat(2, 1fr); gap:8mm; }
+  .p-card{ border:1px dashed #888; border-radius:4mm; padding:5mm; display:flex; gap:5mm; align-items:center; break-inside:avoid; height:58mm; }
+  .p-card .q{ width:44mm; flex:none; } .p-card .q svg{ width:100%; height:auto; display:block; }
+  .p-card .n{ font-weight:700; font-size:13pt; } .p-card .s{ font-size:9.5pt; color:#333; margin-top:2mm; }
+  .p-pins{ display:grid; grid-template-columns:repeat(3, 1fr); gap:4mm; }
+  .p-pin{ border:1px dashed #888; padding:4mm; break-inside:avoid; }
+  .p-pin b{ display:block; font-size:16pt; letter-spacing:2pt; margin-top:1mm; }
+  table.p{ width:100%; border-collapse:collapse; margin:3mm 0; }
+  table.p th, table.p td{ border:1px solid #000; padding:1.5mm 2.5mm; text-align:left; font-size:10pt; }
+  table.p td.r, table.p th.r{ text-align:right; }
+  .p-break{ break-after:page; }
+  h1.p{ font-size:14pt; margin:0 0 2mm; } h2.p{ font-size:12pt; margin:5mm 0 2mm; }
+}
+
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-in">
+    <div class="brand"><span class="brand-ico" aria-hidden="true">✊</span><span id="brandName">Cuotas Sindicales</span></div>
+    <button type="button" class="sync-chip" id="syncChip" data-act="sync-now">Sin conexión</button>
+  </div>
+  <nav class="tabs" id="tabs">
+    <button type="button" data-tab="inicio">🏠 Inicio</button>
+    <button type="button" data-tab="socios">👥 Socios</button>
+    <button type="button" data-tab="pagos">💵 Pagos</button>
+    <button type="button" data-tab="cuotas">📅 Cuotas</button>
+    <button type="button" data-tab="portal">🪪 Portal</button>
+    <button type="button" data-tab="ajustes">⚙️ Ajustes</button>
+  </nav>
+</header>
+<main id="view"></main>
+<div id="modalRoot"></div>
+<div id="toasts" aria-live="polite"></div>
+<div id="printArea"></div>
+<script>
+var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],f={},c=function(t,r){o=function(t){for(var r=new Array(t),e=0;e<t;e+=1){r[e]=new Array(t);for(var n=0;n<t;n+=1)r[e][n]=null}return r}(i=4*e+17),l(0,0),l(i-7,0),l(0,i-7),s(),h(),d(t,r),e>=7&&v(t),null==a&&(a=p(e,n,u)),w(a,r)},l=function(t,r){for(var e=-1;e<=7;e+=1)if(!(t+e<=-1||i<=t+e))for(var n=-1;n<=7;n+=1)r+n<=-1||i<=r+n||(o[t+e][r+n]=0<=e&&e<=6&&(0==n||6==n)||0<=n&&n<=6&&(0==e||6==e)||2<=e&&e<=4&&2<=n&&n<=4)},h=function(){for(var t=8;t<i-8;t+=1)null==o[t][6]&&(o[t][6]=t%2==0);for(var r=8;r<i-8;r+=1)null==o[6][r]&&(o[6][r]=r%2==0)},s=function(){for(var t=B.getPatternPosition(e),r=0;r<t.length;r+=1)for(var n=0;n<t.length;n+=1){var i=t[r],a=t[n];if(null==o[i][a])for(var u=-2;u<=2;u+=1)for(var f=-2;f<=2;f+=1)o[i+u][a+f]=-2==u||2==u||-2==f||2==f||0==u&&0==f}},v=function(t){for(var r=B.getBCHTypeNumber(e),n=0;n<18;n+=1){var a=!t&&1==(r>>n&1);o[Math.floor(n/3)][n%3+i-8-3]=a}for(n=0;n<18;n+=1){a=!t&&1==(r>>n&1);o[n%3+i-8-3][Math.floor(n/3)]=a}},d=function(t,r){for(var e=n<<3|r,a=B.getBCHTypeInfo(e),u=0;u<15;u+=1){var f=!t&&1==(a>>u&1);u<6?o[u][8]=f:u<8?o[u+1][8]=f:o[i-15+u][8]=f}for(u=0;u<15;u+=1){f=!t&&1==(a>>u&1);u<8?o[8][i-u-1]=f:u<9?o[8][15-u-1+1]=f:o[8][15-u-1]=f}o[i-8][8]=!t},w=function(t,r){for(var e=-1,n=i-1,a=7,u=0,f=B.getMaskFunction(r),c=i-1;c>0;c-=2)for(6==c&&(c-=1);;){for(var g=0;g<2;g+=1)if(null==o[n][c-g]){var l=!1;u<t.length&&(l=1==(t[u]>>>a&1)),f(n,c-g)&&(l=!l),o[n][c-g]=l,-1==(a-=1)&&(u+=1,a=7)}if((n+=e)<0||i<=n){n-=e,e=-e;break}}},p=function(t,r,e){for(var n=A.getRSBlocks(t,r),o=b(),i=0;i<e.length;i+=1){var a=e[i];o.put(a.getMode(),4),o.put(a.getLength(),B.getLengthInBits(a.getMode(),t)),a.write(o)}var u=0;for(i=0;i<n.length;i+=1)u+=n[i].dataCount;if(o.getLengthInBits()>8*u)throw"code length overflow. ("+o.getLengthInBits()+">"+8*u+")";for(o.getLengthInBits()+4<=8*u&&o.put(0,4);o.getLengthInBits()%8!=0;)o.putBit(!1);for(;!(o.getLengthInBits()>=8*u||(o.put(236,8),o.getLengthInBits()>=8*u));)o.put(17,8);return function(t,r){for(var e=0,n=0,o=0,i=new Array(r.length),a=new Array(r.length),u=0;u<r.length;u+=1){var f=r[u].dataCount,c=r[u].totalCount-f;n=Math.max(n,f),o=Math.max(o,c),i[u]=new Array(f);for(var g=0;g<i[u].length;g+=1)i[u][g]=255&t.getBuffer()[g+e];e+=f;var l=B.getErrorCorrectPolynomial(c),h=k(i[u],l.getLength()-1).mod(l);for(a[u]=new Array(l.getLength()-1),g=0;g<a[u].length;g+=1){var s=g+h.getLength()-a[u].length;a[u][g]=s>=0?h.getAt(s):0}}var v=0;for(g=0;g<r.length;g+=1)v+=r[g].totalCount;var d=new Array(v),w=0;for(g=0;g<n;g+=1)for(u=0;u<r.length;u+=1)g<i[u].length&&(d[w]=i[u][g],w+=1);for(g=0;g<o;g+=1)for(u=0;u<r.length;u+=1)g<a[u].length&&(d[w]=a[u][g],w+=1);return d}(o,n)};f.addData=function(t,r){var e=null;switch(r=r||"Byte"){case"Numeric":e=M(t);break;case"Alphanumeric":e=x(t);break;case"Byte":e=m(t);break;case"Kanji":e=L(t);break;default:throw"mode:"+r}u.push(e),a=null},f.isDark=function(t,r){if(t<0||i<=t||r<0||i<=r)throw t+","+r;return o[t][r]},f.getModuleCount=function(){return i},f.make=function(){if(e<1){for(var t=1;t<40;t++){for(var r=A.getRSBlocks(t,n),o=b(),i=0;i<u.length;i++){var a=u[i];o.put(a.getMode(),4),o.put(a.getLength(),B.getLengthInBits(a.getMode(),t)),a.write(o)}var g=0;for(i=0;i<r.length;i++)g+=r[i].dataCount;if(o.getLengthInBits()<=8*g)break}e=t}c(!1,function(){for(var t=0,r=0,e=0;e<8;e+=1){c(!0,e);var n=B.getLostPoint(f);(0==e||t>n)&&(t=n,r=e)}return r}())},f.createTableTag=function(t,r){t=t||2;var e="";e+='<table style="',e+=" border-width: 0px; border-style: none;",e+=" border-collapse: collapse;",e+=" padding: 0px; margin: "+(r=void 0===r?4*t:r)+"px;",e+='">',e+="<tbody>";for(var n=0;n<f.getModuleCount();n+=1){e+="<tr>";for(var o=0;o<f.getModuleCount();o+=1)e+='<td style="',e+=" border-width: 0px; border-style: none;",e+=" border-collapse: collapse;",e+=" padding: 0px; margin: 0px;",e+=" width: "+t+"px;",e+=" height: "+t+"px;",e+=" background-color: ",e+=f.isDark(n,o)?"#000000":"#ffffff",e+=";",e+='"/>';e+="</tr>"}return e+="</tbody>",e+="</table>"},f.createSvgTag=function(t,r,e,n){var o={};"object"==typeof arguments[0]&&(t=(o=arguments[0]).cellSize,r=o.margin,e=o.alt,n=o.title),t=t||2,r=void 0===r?4*t:r,(e="string"==typeof e?{text:e}:e||{}).text=e.text||null,e.id=e.text?e.id||"qrcode-description":null,(n="string"==typeof n?{text:n}:n||{}).text=n.text||null,n.id=n.text?n.id||"qrcode-title":null;var i,a,u,c,g=f.getModuleCount()*t+2*r,l="";for(c="l"+t+",0 0,"+t+" -"+t+",0 0,-"+t+"z ",l+='<svg version="1.1" xmlns="http://www.w3.org/2000/svg"',l+=o.scalable?"":' width="'+g+'px" height="'+g+'px"',l+=' viewBox="0 0 '+g+" "+g+'" ',l+=' preserveAspectRatio="xMinYMin meet"',l+=n.text||e.text?' role="img" aria-labelledby="'+y([n.id,e.id].join(" ").trim())+'"':"",l+=">",l+=n.text?'<title id="'+y(n.id)+'">'+y(n.text)+"</title>":"",l+=e.text?'<description id="'+y(e.id)+'">'+y(e.text)+"</description>":"",l+='<rect width="100%" height="100%" fill="white" cx="0" cy="0"/>',l+='<path d="',a=0;a<f.getModuleCount();a+=1)for(u=a*t+r,i=0;i<f.getModuleCount();i+=1)f.isDark(a,i)&&(l+="M"+(i*t+r)+","+u+c);return l+='" stroke="transparent" fill="black"/>',l+="</svg>"},f.createDataURL=function(t,r){t=t||2,r=void 0===r?4*t:r;var e=f.getModuleCount()*t+2*r,n=r,o=e-r;return I(e,e,function(r,e){if(n<=r&&r<o&&n<=e&&e<o){var i=Math.floor((r-n)/t),a=Math.floor((e-n)/t);return f.isDark(a,i)?0:1}return 1})},f.createImgTag=function(t,r,e){t=t||2,r=void 0===r?4*t:r;var n=f.getModuleCount()*t+2*r,o="";return o+="<img",o+=' src="',o+=f.createDataURL(t,r),o+='"',o+=' width="',o+=n,o+='"',o+=' height="',o+=n,o+='"',e&&(o+=' alt="',o+=y(e),o+='"'),o+="/>"};var y=function(t){for(var r="",e=0;e<t.length;e+=1){var n=t.charAt(e);switch(n){case"<":r+="&lt;";break;case">":r+="&gt;";break;case"&":r+="&amp;";break;case'"':r+="&quot;";break;default:r+=n}}return r};return f.createASCII=function(t,r){if((t=t||1)<2)return function(t){t=void 0===t?2:t;var r,e,n,o,i,a=1*f.getModuleCount()+2*t,u=t,c=a-t,g={"██":"█","█ ":"▀"," █":"▄","  ":" "},l={"██":"▀","█ ":"▀"," █":" ","  ":" "},h="";for(r=0;r<a;r+=2){for(n=Math.floor((r-u)/1),o=Math.floor((r+1-u)/1),e=0;e<a;e+=1)i="█",u<=e&&e<c&&u<=r&&r<c&&f.isDark(n,Math.floor((e-u)/1))&&(i=" "),u<=e&&e<c&&u<=r+1&&r+1<c&&f.isDark(o,Math.floor((e-u)/1))?i+=" ":i+="█",h+=t<1&&r+1>=c?l[i]:g[i];h+="\n"}return a%2&&t>0?h.substring(0,h.length-a-1)+Array(a+1).join("▀"):h.substring(0,h.length-1)}(r);t-=1,r=void 0===r?2*t:r;var e,n,o,i,a=f.getModuleCount()*t+2*r,u=r,c=a-r,g=Array(t+1).join("██"),l=Array(t+1).join("  "),h="",s="";for(e=0;e<a;e+=1){for(o=Math.floor((e-u)/t),s="",n=0;n<a;n+=1)i=1,u<=n&&n<c&&u<=e&&e<c&&f.isDark(o,Math.floor((n-u)/t))&&(i=0),s+=i?g:l;for(o=0;o<t;o+=1)h+=s+"\n"}return h.substring(0,h.length-1)},f.renderTo2dContext=function(t,r){r=r||2;for(var e=f.getModuleCount(),n=0;n<e;n++)for(var o=0;o<e;o++)t.fillStyle=f.isDark(n,o)?"black":"white",t.fillRect(n*r,o*r,r,r)},f};t.stringToBytes=(t.stringToBytesFuncs={default:function(t){for(var r=[],e=0;e<t.length;e+=1){var n=t.charCodeAt(e);r.push(255&n)}return r}}).default,t.createStringToBytes=function(t,r){var e=function(){for(var e=S(t),n=function(){var t=e.read();if(-1==t)throw"eof";return t},o=0,i={};;){var a=e.read();if(-1==a)break;var u=n(),f=n()<<8|n();i[String.fromCharCode(a<<8|u)]=f,o+=1}if(o!=r)throw o+" != "+r;return i}(),n="?".charCodeAt(0);return function(t){for(var r=[],o=0;o<t.length;o+=1){var i=t.charCodeAt(o);if(i<128)r.push(i);else{var a=e[t.charAt(o)];"number"==typeof a?(255&a)==a?r.push(a):(r.push(a>>>8),r.push(255&a)):r.push(n)}}return r}};var r,e,n,o,i,a=1,u=2,f=4,c=8,g={L:1,M:0,Q:3,H:2},l=0,h=1,s=2,v=3,d=4,w=5,p=6,y=7,B=(r=[[],[6,18],[6,22],[6,26],[6,30],[6,34],[6,22,38],[6,24,42],[6,26,46],[6,28,50],[6,30,54],[6,32,58],[6,34,62],[6,26,46,66],[6,26,48,70],[6,26,50,74],[6,30,54,78],[6,30,56,82],[6,30,58,86],[6,34,62,90],[6,28,50,72,94],[6,26,50,74,98],[6,30,54,78,102],[6,28,54,80,106],[6,32,58,84,110],[6,30,58,86,114],[6,34,62,90,118],[6,26,50,74,98,122],[6,30,54,78,102,126],[6,26,52,78,104,130],[6,30,56,82,108,134],[6,34,60,86,112,138],[6,30,58,86,114,142],[6,34,62,90,118,146],[6,30,54,78,102,126,150],[6,24,50,76,102,128,154],[6,28,54,80,106,132,158],[6,32,58,84,110,136,162],[6,26,54,82,110,138,166],[6,30,58,86,114,142,170]],e=1335,n=7973,i=function(t){for(var r=0;0!=t;)r+=1,t>>>=1;return r},(o={}).getBCHTypeInfo=function(t){for(var r=t<<10;i(r)-i(e)>=0;)r^=e<<i(r)-i(e);return 21522^(t<<10|r)},o.getBCHTypeNumber=function(t){for(var r=t<<12;i(r)-i(n)>=0;)r^=n<<i(r)-i(n);return t<<12|r},o.getPatternPosition=function(t){return r[t-1]},o.getMaskFunction=function(t){switch(t){case l:return function(t,r){return(t+r)%2==0};case h:return function(t,r){return t%2==0};case s:return function(t,r){return r%3==0};case v:return function(t,r){return(t+r)%3==0};case d:return function(t,r){return(Math.floor(t/2)+Math.floor(r/3))%2==0};case w:return function(t,r){return t*r%2+t*r%3==0};case p:return function(t,r){return(t*r%2+t*r%3)%2==0};case y:return function(t,r){return(t*r%3+(t+r)%2)%2==0};default:throw"bad maskPattern:"+t}},o.getErrorCorrectPolynomial=function(t){for(var r=k([1],0),e=0;e<t;e+=1)r=r.multiply(k([1,C.gexp(e)],0));return r},o.getLengthInBits=function(t,r){if(1<=r&&r<10)switch(t){case a:return 10;case u:return 9;case f:case c:return 8;default:throw"mode:"+t}else if(r<27)switch(t){case a:return 12;case u:return 11;case f:return 16;case c:return 10;default:throw"mode:"+t}else{if(!(r<41))throw"type:"+r;switch(t){case a:return 14;case u:return 13;case f:return 16;case c:return 12;default:throw"mode:"+t}}},o.getLostPoint=function(t){for(var r=t.getModuleCount(),e=0,n=0;n<r;n+=1)for(var o=0;o<r;o+=1){for(var i=0,a=t.isDark(n,o),u=-1;u<=1;u+=1)if(!(n+u<0||r<=n+u))for(var f=-1;f<=1;f+=1)o+f<0||r<=o+f||0==u&&0==f||a==t.isDark(n+u,o+f)&&(i+=1);i>5&&(e+=3+i-5)}for(n=0;n<r-1;n+=1)for(o=0;o<r-1;o+=1){var c=0;t.isDark(n,o)&&(c+=1),t.isDark(n+1,o)&&(c+=1),t.isDark(n,o+1)&&(c+=1),t.isDark(n+1,o+1)&&(c+=1),0!=c&&4!=c||(e+=3)}for(n=0;n<r;n+=1)for(o=0;o<r-6;o+=1)t.isDark(n,o)&&!t.isDark(n,o+1)&&t.isDark(n,o+2)&&t.isDark(n,o+3)&&t.isDark(n,o+4)&&!t.isDark(n,o+5)&&t.isDark(n,o+6)&&(e+=40);for(o=0;o<r;o+=1)for(n=0;n<r-6;n+=1)t.isDark(n,o)&&!t.isDark(n+1,o)&&t.isDark(n+2,o)&&t.isDark(n+3,o)&&t.isDark(n+4,o)&&!t.isDark(n+5,o)&&t.isDark(n+6,o)&&(e+=40);var g=0;for(o=0;o<r;o+=1)for(n=0;n<r;n+=1)t.isDark(n,o)&&(g+=1);return e+=Math.abs(100*g/r/r-50)/5*10},o),C=function(){for(var t=new Array(256),r=new Array(256),e=0;e<8;e+=1)t[e]=1<<e;for(e=8;e<256;e+=1)t[e]=t[e-4]^t[e-5]^t[e-6]^t[e-8];for(e=0;e<255;e+=1)r[t[e]]=e;var n={glog:function(t){if(t<1)throw"glog("+t+")";return r[t]},gexp:function(r){for(;r<0;)r+=255;for(;r>=256;)r-=255;return t[r]}};return n}();function k(t,r){if(void 0===t.length)throw t.length+"/"+r;var e=function(){for(var e=0;e<t.length&&0==t[e];)e+=1;for(var n=new Array(t.length-e+r),o=0;o<t.length-e;o+=1)n[o]=t[o+e];return n}(),n={getAt:function(t){return e[t]},getLength:function(){return e.length},multiply:function(t){for(var r=new Array(n.getLength()+t.getLength()-1),e=0;e<n.getLength();e+=1)for(var o=0;o<t.getLength();o+=1)r[e+o]^=C.gexp(C.glog(n.getAt(e))+C.glog(t.getAt(o)));return k(r,0)},mod:function(t){if(n.getLength()-t.getLength()<0)return n;for(var r=C.glog(n.getAt(0))-C.glog(t.getAt(0)),e=new Array(n.getLength()),o=0;o<n.getLength();o+=1)e[o]=n.getAt(o);for(o=0;o<t.getLength();o+=1)e[o]^=C.gexp(C.glog(t.getAt(o))+r);return k(e,0).mod(t)}};return n}var A=function(){var t=[[1,26,19],[1,26,16],[1,26,13],[1,26,9],[1,44,34],[1,44,28],[1,44,22],[1,44,16],[1,70,55],[1,70,44],[2,35,17],[2,35,13],[1,100,80],[2,50,32],[2,50,24],[4,25,9],[1,134,108],[2,67,43],[2,33,15,2,34,16],[2,33,11,2,34,12],[2,86,68],[4,43,27],[4,43,19],[4,43,15],[2,98,78],[4,49,31],[2,32,14,4,33,15],[4,39,13,1,40,14],[2,121,97],[2,60,38,2,61,39],[4,40,18,2,41,19],[4,40,14,2,41,15],[2,146,116],[3,58,36,2,59,37],[4,36,16,4,37,17],[4,36,12,4,37,13],[2,86,68,2,87,69],[4,69,43,1,70,44],[6,43,19,2,44,20],[6,43,15,2,44,16],[4,101,81],[1,80,50,4,81,51],[4,50,22,4,51,23],[3,36,12,8,37,13],[2,116,92,2,117,93],[6,58,36,2,59,37],[4,46,20,6,47,21],[7,42,14,4,43,15],[4,133,107],[8,59,37,1,60,38],[8,44,20,4,45,21],[12,33,11,4,34,12],[3,145,115,1,146,116],[4,64,40,5,65,41],[11,36,16,5,37,17],[11,36,12,5,37,13],[5,109,87,1,110,88],[5,65,41,5,66,42],[5,54,24,7,55,25],[11,36,12,7,37,13],[5,122,98,1,123,99],[7,73,45,3,74,46],[15,43,19,2,44,20],[3,45,15,13,46,16],[1,135,107,5,136,108],[10,74,46,1,75,47],[1,50,22,15,51,23],[2,42,14,17,43,15],[5,150,120,1,151,121],[9,69,43,4,70,44],[17,50,22,1,51,23],[2,42,14,19,43,15],[3,141,113,4,142,114],[3,70,44,11,71,45],[17,47,21,4,48,22],[9,39,13,16,40,14],[3,135,107,5,136,108],[3,67,41,13,68,42],[15,54,24,5,55,25],[15,43,15,10,44,16],[4,144,116,4,145,117],[17,68,42],[17,50,22,6,51,23],[19,46,16,6,47,17],[2,139,111,7,140,112],[17,74,46],[7,54,24,16,55,25],[34,37,13],[4,151,121,5,152,122],[4,75,47,14,76,48],[11,54,24,14,55,25],[16,45,15,14,46,16],[6,147,117,4,148,118],[6,73,45,14,74,46],[11,54,24,16,55,25],[30,46,16,2,47,17],[8,132,106,4,133,107],[8,75,47,13,76,48],[7,54,24,22,55,25],[22,45,15,13,46,16],[10,142,114,2,143,115],[19,74,46,4,75,47],[28,50,22,6,51,23],[33,46,16,4,47,17],[8,152,122,4,153,123],[22,73,45,3,74,46],[8,53,23,26,54,24],[12,45,15,28,46,16],[3,147,117,10,148,118],[3,73,45,23,74,46],[4,54,24,31,55,25],[11,45,15,31,46,16],[7,146,116,7,147,117],[21,73,45,7,74,46],[1,53,23,37,54,24],[19,45,15,26,46,16],[5,145,115,10,146,116],[19,75,47,10,76,48],[15,54,24,25,55,25],[23,45,15,25,46,16],[13,145,115,3,146,116],[2,74,46,29,75,47],[42,54,24,1,55,25],[23,45,15,28,46,16],[17,145,115],[10,74,46,23,75,47],[10,54,24,35,55,25],[19,45,15,35,46,16],[17,145,115,1,146,116],[14,74,46,21,75,47],[29,54,24,19,55,25],[11,45,15,46,46,16],[13,145,115,6,146,116],[14,74,46,23,75,47],[44,54,24,7,55,25],[59,46,16,1,47,17],[12,151,121,7,152,122],[12,75,47,26,76,48],[39,54,24,14,55,25],[22,45,15,41,46,16],[6,151,121,14,152,122],[6,75,47,34,76,48],[46,54,24,10,55,25],[2,45,15,64,46,16],[17,152,122,4,153,123],[29,74,46,14,75,47],[49,54,24,10,55,25],[24,45,15,46,46,16],[4,152,122,18,153,123],[13,74,46,32,75,47],[48,54,24,14,55,25],[42,45,15,32,46,16],[20,147,117,4,148,118],[40,75,47,7,76,48],[43,54,24,22,55,25],[10,45,15,67,46,16],[19,148,118,6,149,119],[18,75,47,31,76,48],[34,54,24,34,55,25],[20,45,15,61,46,16]],r=function(t,r){var e={};return e.totalCount=t,e.dataCount=r,e},e={};return e.getRSBlocks=function(e,n){var o=function(r,e){switch(e){case g.L:return t[4*(r-1)+0];case g.M:return t[4*(r-1)+1];case g.Q:return t[4*(r-1)+2];case g.H:return t[4*(r-1)+3];default:return}}(e,n);if(void 0===o)throw"bad rs block @ typeNumber:"+e+"/errorCorrectionLevel:"+n;for(var i=o.length/3,a=[],u=0;u<i;u+=1)for(var f=o[3*u+0],c=o[3*u+1],l=o[3*u+2],h=0;h<f;h+=1)a.push(r(c,l));return a},e}(),b=function(){var t=[],r=0,e={getBuffer:function(){return t},getAt:function(r){var e=Math.floor(r/8);return 1==(t[e]>>>7-r%8&1)},put:function(t,r){for(var n=0;n<r;n+=1)e.putBit(1==(t>>>r-n-1&1))},getLengthInBits:function(){return r},putBit:function(e){var n=Math.floor(r/8);t.length<=n&&t.push(0),e&&(t[n]|=128>>>r%8),r+=1}};return e},M=function(t){var r=a,e=t,n={getMode:function(){return r},getLength:function(t){return e.length},write:function(t){for(var r=e,n=0;n+2<r.length;)t.put(o(r.substring(n,n+3)),10),n+=3;n<r.length&&(r.length-n==1?t.put(o(r.substring(n,n+1)),4):r.length-n==2&&t.put(o(r.substring(n,n+2)),7))}},o=function(t){for(var r=0,e=0;e<t.length;e+=1)r=10*r+i(t.charAt(e));return r},i=function(t){if("0"<=t&&t<="9")return t.charCodeAt(0)-"0".charCodeAt(0);throw"illegal char :"+t};return n},x=function(t){var r=u,e=t,n={getMode:function(){return r},getLength:function(t){return e.length},write:function(t){for(var r=e,n=0;n+1<r.length;)t.put(45*o(r.charAt(n))+o(r.charAt(n+1)),11),n+=2;n<r.length&&t.put(o(r.charAt(n)),6)}},o=function(t){if("0"<=t&&t<="9")return t.charCodeAt(0)-"0".charCodeAt(0);if("A"<=t&&t<="Z")return t.charCodeAt(0)-"A".charCodeAt(0)+10;switch(t){case" ":return 36;case"$":return 37;case"%":return 38;case"*":return 39;case"+":return 40;case"-":return 41;case".":return 42;case"/":return 43;case":":return 44;default:throw"illegal char :"+t}};return n},m=function(r){var e=f,n=t.stringToBytes(r),o={getMode:function(){return e},getLength:function(t){return n.length},write:function(t){for(var r=0;r<n.length;r+=1)t.put(n[r],8)}};return o},L=function(r){var e=c,n=t.stringToBytesFuncs.SJIS;if(!n)throw"sjis not supported.";!function(){var t=n("友");if(2!=t.length||38726!=(t[0]<<8|t[1]))throw"sjis not supported."}();var o=n(r),i={getMode:function(){return e},getLength:function(t){return~~(o.length/2)},write:function(t){for(var r=o,e=0;e+1<r.length;){var n=(255&r[e])<<8|255&r[e+1];if(33088<=n&&n<=40956)n-=33088;else{if(!(57408<=n&&n<=60351))throw"illegal char at "+(e+1)+"/"+n;n-=49472}n=192*(n>>>8&255)+(255&n),t.put(n,13),e+=2}if(e<r.length)throw"illegal char at "+(e+1)}};return i},D=function(){var t=[],r={writeByte:function(r){t.push(255&r)},writeShort:function(t){r.writeByte(t),r.writeByte(t>>>8)},writeBytes:function(t,e,n){e=e||0,n=n||t.length;for(var o=0;o<n;o+=1)r.writeByte(t[o+e])},writeString:function(t){for(var e=0;e<t.length;e+=1)r.writeByte(t.charCodeAt(e))},toByteArray:function(){return t},toString:function(){var r="";r+="[";for(var e=0;e<t.length;e+=1)e>0&&(r+=","),r+=t[e];return r+="]"}};return r},S=function(t){var r=t,e=0,n=0,o=0,i={read:function(){for(;o<8;){if(e>=r.length){if(0==o)return-1;throw"unexpected end of file./"+o}var t=r.charAt(e);if(e+=1,"="==t)return o=0,-1;t.match(/^\s$/)||(n=n<<6|a(t.charCodeAt(0)),o+=6)}var i=n>>>o-8&255;return o-=8,i}},a=function(t){if(65<=t&&t<=90)return t-65;if(97<=t&&t<=122)return t-97+26;if(48<=t&&t<=57)return t-48+52;if(43==t)return 62;if(47==t)return 63;throw"c:"+t};return i},I=function(t,r,e){for(var n=function(t,r){var e=t,n=r,o=new Array(t*r),i={setPixel:function(t,r,n){o[r*e+t]=n},write:function(t){t.writeString("GIF87a"),t.writeShort(e),t.writeShort(n),t.writeByte(128),t.writeByte(0),t.writeByte(0),t.writeByte(0),t.writeByte(0),t.writeByte(0),t.writeByte(255),t.writeByte(255),t.writeByte(255),t.writeString(","),t.writeShort(0),t.writeShort(0),t.writeShort(e),t.writeShort(n),t.writeByte(0);var r=a(2);t.writeByte(2);for(var o=0;r.length-o>255;)t.writeByte(255),t.writeBytes(r,o,255),o+=255;t.writeByte(r.length-o),t.writeBytes(r,o,r.length-o),t.writeByte(0),t.writeString(";")}},a=function(t){for(var r=1<<t,e=1+(1<<t),n=t+1,i=u(),a=0;a<r;a+=1)i.add(String.fromCharCode(a));i.add(String.fromCharCode(r)),i.add(String.fromCharCode(e));var f,c,g,l=D(),h=(f=l,c=0,g=0,{write:function(t,r){if(t>>>r!=0)throw"length over";for(;c+r>=8;)f.writeByte(255&(t<<c|g)),r-=8-c,t>>>=8-c,g=0,c=0;g|=t<<c,c+=r},flush:function(){c>0&&f.writeByte(g)}});h.write(r,n);var s=0,v=String.fromCharCode(o[s]);for(s+=1;s<o.length;){var d=String.fromCharCode(o[s]);s+=1,i.contains(v+d)?v+=d:(h.write(i.indexOf(v),n),i.size()<4095&&(i.size()==1<<n&&(n+=1),i.add(v+d)),v=d)}return h.write(i.indexOf(v),n),h.write(e,n),h.flush(),l.toByteArray()},u=function(){var t={},r=0,e={add:function(n){if(e.contains(n))throw"dup key:"+n;t[n]=r,r+=1},size:function(){return r},indexOf:function(r){return t[r]},contains:function(r){return void 0!==t[r]}};return e};return i}(t,r),o=0;o<r;o+=1)for(var i=0;i<t;i+=1)n.setPixel(i,o,e(i,o));var a=D();n.write(a);for(var u=function(){var t=0,r=0,e=0,n="",o={},i=function(t){n+=String.fromCharCode(a(63&t))},a=function(t){if(t<0);else{if(t<26)return 65+t;if(t<52)return t-26+97;if(t<62)return t-52+48;if(62==t)return 43;if(63==t)return 47}throw"n:"+t};return o.writeByte=function(n){for(t=t<<8|255&n,r+=8,e+=1;r>=6;)i(t>>>r-6),r-=6},o.flush=function(){if(r>0&&(i(t<<6-r),t=0,r=0),e%3!=0)for(var o=3-e%3,a=0;a<o;a+=1)n+="="},o.toString=function(){return n},o}(),f=a.toByteArray(),c=0;c<f.length;c+=1)u.writeByte(f[c]);return u.flush(),"data:image/gif;base64,"+u};return t}();qrcode.stringToBytesFuncs["UTF-8"]=function(t){return function(t){for(var r=[],e=0;e<t.length;e++){var n=t.charCodeAt(e);n<128?r.push(n):n<2048?r.push(192|n>>6,128|63&n):n<55296||n>=57344?r.push(224|n>>12,128|n>>6&63,128|63&n):(e++,n=65536+((1023&n)<<10|1023&t.charCodeAt(e)),r.push(240|n>>18,128|n>>12&63,128|n>>6&63,128|63&n))}return r}(t)};
+
+</script>
+<script>
+'use strict';
+/* =====================================================================
+   CUOTAS SINDICALES — administración de cuotas y deuda de socios
+   Un solo archivo. Datos locales en el dispositivo + sincronización
+   cifrada entre dirigentes a través de un repositorio de GitHub.
+   ===================================================================== */
+
+/* ---------- Utilidades ---------- */
+const $ = (s, el)=> (el || document).querySelector(s);
+const $$ = (s, el)=> Array.from((el || document).querySelectorAll(s));
+const uid = ()=> Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+const now = ()=> Date.now();
+function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, c=> ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function miles(n){ const v = Math.round(Math.abs(Number(n) || 0)); return String(v).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); }
+function clp(n){ n = Math.round(Number(n) || 0); return (n < 0 ? '-$' : '$') + miles(n); }
+function parseMonto(str){ const s = String(str == null ? '' : str).replace(/[^\d-]/g, ''); const n = parseInt(s, 10); return isNaN(n) ? 0 : n; }
+function pad2(n){ return String(n).padStart(2, '0'); }
+function todayISO(){ const d = new Date(); return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
+function curYm(){ return todayISO().slice(0, 7); }
+const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+const MESES_C = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+function ymToIdx(ym){ const m = String(ym || '').match(/^(\d{4})-(\d{2})/); if(!m) return NaN; return Number(m[1]) * 12 + Number(m[2]) - 1; }
+function idxToYm(i){ const y = Math.floor(i / 12), m = i % 12 + 1; return y + '-' + pad2(m); }
+function mesLabel(ym, corto){ const i = ymToIdx(ym); if(isNaN(i)) return ''; const m = i % 12, y = Math.floor(i / 12); return corto ? `${MESES_C[m]} ${y}` : `${MESES[m]} ${y}`; }
+function mesLabelCap(ym){ const s = mesLabel(ym); return s.charAt(0).toUpperCase() + s.slice(1); }
+function fdate(iso){ const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[3]}/${m[2]}/${m[1]}` : ''; }
+function fdatetime(ts){ if(!ts) return ''; const d = new Date(ts); return `${pad2(d.getDate())}/${pad2(d.getMonth()+1)}/${d.getFullYear()} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`; }
+function normTxt(s){ return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
+function lsGet(k, def){ try{ const v = localStorage.getItem(k); return v === null ? def : v; }catch(e){ return def; } }
+function lsSet(k, v){ try{ if(v === null || v === undefined) localStorage.removeItem(k); else localStorage.setItem(k, v); }catch(e){} }
+const TOKEN_ALPHA = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+function randomToken(len){ const b = crypto.getRandomValues(new Uint8Array(len)); let s = ''; for(const x of b) s += TOKEN_ALPHA[x % TOKEN_ALPHA.length]; return s; }
+function randomPin(){ const b = crypto.getRandomValues(new Uint32Array(1)); return String(b[0] % 10000).padStart(4, '0'); }
+function randomId(len){ const a = 'abcdefghijkmnpqrstuvwxyz23456789'; const b = crypto.getRandomValues(new Uint8Array(len)); let s = ''; for(const x of b) s += a[x % a.length]; return s; }
+function formatRut(r){
+  const c = String(r || '').toUpperCase().replace(/[^0-9K]/g, '');
+  if(c.length < 2) return String(r || '').trim();
+  const body = c.slice(0, -1), dv = c.slice(-1);
+  return body.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + '-' + dv;
+}
+function rutValido(r){
+  const c = String(r || '').toUpperCase().replace(/[^0-9K]/g, '');
+  if(c.length < 2) return false;
+  const body = c.slice(0, -1), dv = c.slice(-1);
+  let s = 0, m = 2;
+  for(let i = body.length - 1; i >= 0; i--){ s += Number(body[i]) * m; m = m === 7 ? 2 : m + 1; }
+  const r2 = 11 - (s % 11);
+  const exp = r2 === 11 ? '0' : r2 === 10 ? 'K' : String(r2);
+  return exp === dv;
+}
+
+/* ---------- Estado ----------
+   Cada registro lleva id, u (última modificación, ms) y del (borrado lógico).
+   Así los cambios de varios dirigentes se combinan registro por registro sin pisarse. */
+const COLS = ['tarifas', 'socios', 'pagos', 'cobros', 'ajustes'];
+const MEDIOS = ['Efectivo', 'Transferencia', 'Descuento por planilla', 'Depósito', 'Otro'];
+function emptyState(){
+  return { v: 1, config: { nombre: '', diaVencimiento: 10, mesInicioDefault: curYm(), portalAuto: true, u: 0 }, tarifas: [], socios: [], pagos: [], cobros: [], ajustes: [] };
+}
+function normalizeState(s){
+  const e = emptyState();
+  if(!s || typeof s !== 'object') return e;
+  const out = { v: 1, config: Object.assign({}, e.config, s.config || {}) };
+  COLS.forEach(c=> out[c] = Array.isArray(s[c]) ? s[c].filter(x=> x && x.id) : []);
+  return out;
+}
+let S = normalizeState(JSON.parse(lsGet('cs_state', 'null') || 'null'));
+function saveLocal(){ lsSet('cs_state', JSON.stringify(S)); }
+function live(col){ return S[col].filter(x=> !x.del); }
+function getById(col, id){ return S[col].find(x=> x.id === id && !x.del) || null; }
+
+let _cache = new Map();
+function invalidate(){ _cache = new Map(); }
+function upsert(col, obj, opts){
+  obj.u = now();
+  const i = S[col].findIndex(x=> x.id === obj.id);
+  if(i >= 0) S[col][i] = obj; else S[col].push(obj);
+  changed(opts);
+}
+function removeRec(col, id, opts){
+  const x = S[col].find(r=> r.id === id);
+  if(x){ x.del = true; x.u = now(); changed(opts); }
+}
+function setConfig(patch, opts){ Object.assign(S.config, patch); S.config.u = now(); changed(opts); }
+let changeSeq = 0;
+function changed(opts){
+  changeSeq++;
+  invalidate();
+  saveLocal();
+  lsSet('cs_dirty', '1');
+  scheduleSync();
+  if(!(opts && opts.noRender)) renderView();
+}
+
+/* Combina dos estados: por cada registro gana la versión más reciente */
+function mergeStates(a, b){
+  a = normalizeState(a); b = normalizeState(b);
+  const out = { v: 1, config: (b.config.u || 0) > (a.config.u || 0) ? b.config : a.config };
+  COLS.forEach(c=>{
+    const map = new Map();
+    a[c].forEach(x=> map.set(x.id, x));
+    b[c].forEach(x=>{ const y = map.get(x.id); if(!y || (x.u || 0) > (y.u || 0)) map.set(x.id, x); });
+    out[c] = Array.from(map.values());
+  });
+  return out;
+}
+function canonical(s){
+  const o = { config: s.config };
+  COLS.forEach(c=> o[c] = s[c].slice().sort((x, y)=> x.id < y.id ? -1 : 1));
+  return JSON.stringify(o);
+}
+
+/* ---------- Cálculo de cuotas y deuda ----------
+   La deuda de cada socio se calcula sola: cuotas mensuales desde su mes de ingreso,
+   más cobros extraordinarios y cargos, menos pagos y descuentos.
+   Los pagos se imputan primero a lo más antiguo (FIFO). */
+function tarifaDe(ym){
+  const i = ymToIdx(ym);
+  let best = null;
+  live('tarifas').forEach(t=>{ const ti = ymToIdx(t.desde); if(!isNaN(ti) && ti <= i && (!best || ti > ymToIdx(best.desde))) best = t; });
+  return best ? Number(best.monto) || 0 : 0;
+}
+function tarifaActual(){ return tarifaDe(curYm()); }
+function diaVenc(){ const d = Number(S.config.diaVencimiento); return d >= 1 && d <= 31 ? d : 10; }
+/* Último mes ya vencido (índice). Si hoy no llega al día de vencimiento, el mes en curso aún no vence. */
+function dueIdx(){ const d = new Date(); const cur = ymToIdx(curYm()); return d.getDate() >= diaVenc() ? cur : cur - 1; }
+function socioInicio(s){ return s.mesInicio || S.config.mesInicioDefault || curYm(); }
+function socioActivo(s){ return !s.mesTermino || ymToIdx(s.mesTermino) >= ymToIdx(curYm()); }
+function cobroAplica(c, s){
+  if(c.socios === 'todos') return true;
+  return Array.isArray(c.socios) && c.socios.includes(s.id);
+}
+function cuentaSocio(s, hastaIdx){
+  const due = dueIdx();
+  const until = Math.max(due, hastaIdx == null ? due : hastaIdx);
+  const key = s.id + '|' + until;
+  if(_cache.has(key)) return _cache.get(key);
+  const start = ymToIdx(socioInicio(s));
+  const endSocio = s.mesTermino ? ymToIdx(s.mesTermino) : Infinity;
+  const end = Math.min(endSocio, until);
+  const aj = live('ajustes').filter(a=> a.socioId === s.id);
+  const exentos = new Map(aj.filter(a=> a.tipo === 'exencion').map(a=> [a.mes, a]));
+  const items = [];
+  for(let i = start; i <= end; i++){
+    const ym = idxToYm(i);
+    if(exentos.has(ym)){ items.push({ tipo: 'exento', mes: ym, idx: i, monto: 0, concepto: 'Cuota ' + mesLabel(ym) + ' (exenta)', motivo: exentos.get(ym).concepto || '' }); continue; }
+    const m = tarifaDe(ym);
+    if(m > 0) items.push({ tipo: 'cuota', mes: ym, idx: i, monto: m, concepto: 'Cuota ' + mesLabel(ym) });
+  }
+  live('cobros').forEach(c=>{
+    const i = ymToIdx(c.mes);
+    if(isNaN(i) || i < start || i > endSocio || i > until) return;
+    if(!cobroAplica(c, s)) return;
+    items.push({ tipo: 'cobro', mes: c.mes, idx: i, monto: Number(c.monto) || 0, concepto: c.concepto || 'Cobro extraordinario', ref: c.id });
+  });
+  aj.filter(a=> a.tipo === 'cargo').forEach(a=>{
+    const i = ymToIdx(a.mes);
+    if(isNaN(i) || i > until) return;
+    items.push({ tipo: 'cargo', mes: a.mes, idx: i, monto: Number(a.monto) || 0, concepto: a.concepto || 'Cargo', ref: a.id });
+  });
+  // dentro de un mes, los cobros y cargos se imputan antes que la cuota (así un aporte pagado junto a la cuota no queda como deuda)
+  const ORD = { cobro: 0, cargo: 1, cuota: 2, exento: 2 };
+  items.sort((x, y)=> x.idx - y.idx || ORD[x.tipo] - ORD[y.tipo]);
+  const pagos = live('pagos').filter(p=> p.socioId === s.id);
+  const descuentos = aj.filter(a=> a.tipo === 'descuento');
+  const totalPagos = pagos.reduce((a, p)=> a + (Number(p.monto) || 0), 0);
+  const totalDesc = descuentos.reduce((a, d)=> a + (Number(d.monto) || 0), 0);
+  const creditos = totalPagos + totalDesc;
+  let rem = creditos;
+  let totalVencido = 0, deuda = 0;
+  const mesesAdeudados = [];
+  items.forEach(it=>{
+    it.vencido = it.idx <= due;
+    if(it.monto <= 0){ it.pagado = 0; it.estado = 'exento'; return; }
+    const p = Math.min(rem, it.monto); rem -= p;
+    it.pagado = p;
+    it.estado = p >= it.monto ? 'pagado' : (p > 0 ? 'parcial' : 'pendiente');
+    if(it.vencido){
+      totalVencido += it.monto;
+      deuda += it.monto - p;
+      if(it.tipo === 'cuota' && it.estado !== 'pagado') mesesAdeudados.push(it.mes);
+    }
+  });
+  const res = {
+    items, pagos, descuentos, creditos, totalPagos, totalDesc, totalVencido,
+    deuda: Math.max(0, deuda),
+    saldoFavor: Math.max(0, creditos - totalVencido),
+    mesesAdeudados,
+    alDia: deuda <= 0,
+    ultimoPago: pagos.slice().sort((a, b)=> (b.fecha || '').localeCompare(a.fecha || ''))[0] || null,
+  };
+  _cache.set(key, res);
+  return res;
+}
+/* Estado de cada mes de un año para la grilla del socio */
+function estadoMeses(s, year){
+  const until = ymToIdx(year + '-12');
+  const c = cuentaSocio(s, until);
+  const due = dueIdx();
+  const start = ymToIdx(socioInicio(s));
+  const endSocio = s.mesTermino ? ymToIdx(s.mesTermino) : Infinity;
+  const out = [];
+  for(let m = 1; m <= 12; m++){
+    const ym = year + '-' + pad2(m), i = ymToIdx(ym);
+    const it = c.items.find(x=> x.mes === ym && (x.tipo === 'cuota' || x.tipo === 'exento'));
+    let st, txt = '';
+    if(i < start || i > endSocio){ st = 'nosocio'; txt = '—'; }
+    else if(!it){ st = 'exento'; txt = 'Sin cuota'; }
+    else if(it.tipo === 'exento'){ st = 'exento'; txt = 'Exento'; }
+    else if(it.estado === 'pagado'){ st = i > due ? 'adelantado' : 'pagado'; txt = i > due ? 'Adelantado' : 'Pagado'; }
+    else if(i > due){ st = 'porvencer'; txt = it.estado === 'parcial' ? 'Abono ' + clp(it.pagado) : 'Por vencer'; }
+    else if(it.estado === 'parcial'){ st = 'parcial'; txt = 'Debe ' + clp(it.monto - it.pagado); }
+    else { st = 'adeuda'; txt = 'Debe ' + clp(it.monto); }
+    out.push({ ym, st, txt, item: it });
+  }
+  return out;
+}
+/* Qué cubriría un pago nuevo de cierto monto (vista previa antes de guardar) */
+function previewPago(s, monto){
+  const base = cuentaSocio(s, ymToIdx(curYm()) + 24);
+  let rem = Math.max(0, base.creditos) + monto, covered = [], partial = null;
+  for(const it of base.items){
+    if(it.monto <= 0) continue;
+    if(rem <= 0) break;
+    const pAntes = it.pagado, p = Math.min(rem, it.monto); rem -= p;
+    if(p > pAntes){ if(p >= it.monto) covered.push(it); else partial = { it, p }; }
+  }
+  return { covered, partial, sobrante: Math.max(0, rem) };
+}
+function sociosOrdenados(lista){ return (lista || live('socios')).slice().sort((a, b)=> normTxt(a.nombre).localeCompare(normTxt(b.nombre))); }
+function resumenGeneral(){
+  const socios = live('socios').filter(socioActivo);
+  let deudaTotal = 0, conDeuda = 0, alDia = 0;
+  socios.forEach(s=>{ const c = cuentaSocio(s); deudaTotal += c.deuda; if(c.deuda > 0) conDeuda++; else alDia++; });
+  // deuda de socios retirados que quedó pendiente
+  let deudaRetirados = 0;
+  live('socios').filter(s=> !socioActivo(s)).forEach(s=> deudaRetirados += cuentaSocio(s).deuda);
+  const mes = curYm();
+  const recaudadoMes = live('pagos').filter(p=> (p.fecha || '').slice(0, 7) === mes).reduce((a, p)=> a + (Number(p.monto) || 0), 0);
+  return { activos: socios.length, deudaTotal, conDeuda, alDia, recaudadoMes, deudaRetirados };
+}
+
+/* =====================================================================
+   CIFRADO
+   ===================================================================== */
+const TE = new TextEncoder(), TD = new TextDecoder();
+function bytesToB64(bytes){
+  let bin = '';
+  const CH = 0x8000;
+  for(let i = 0; i < bytes.length; i += CH) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
+  return btoa(bin);
+}
+function b64ToBytes(b64){ const bin = atob(b64); const out = new Uint8Array(bin.length); for(let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i); return out; }
+function utf8ToB64(str){ return bytesToB64(TE.encode(str)); }
+function b64ToUtf8(b64){ return TD.decode(b64ToBytes(String(b64).replace(/\s/g, ''))); }
+function b64url(str){ return utf8ToB64(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+function unb64url(s){ s = String(s).replace(/-/g, '+').replace(/_/g, '/'); while(s.length % 4) s += '='; return b64ToUtf8(s); }
+async function shaBytes(str){ return new Uint8Array(await crypto.subtle.digest('SHA-256', TE.encode(str))); }
+function hex(bytes){ return Array.from(bytes, b=> b.toString(16).padStart(2, '0')).join(''); }
+async function pbkdf2Key(secret, saltBytes, iter){
+  const base = await crypto.subtle.importKey('raw', TE.encode(secret), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: saltBytes, iterations: iter, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+}
+async function aesEncrypt(key, text){
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, TE.encode(text)));
+  return { iv: bytesToB64(iv), ct: bytesToB64(ct) };
+}
+async function aesDecrypt(key, iv, ct){
+  return TD.decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64ToBytes(iv) }, key, b64ToBytes(ct)));
+}
+const ADMIN_ITER = 250000;
+let _adminKey = null;
+async function adminKey(salt, iter){
+  const c = conn();
+  const tag = c.clave + '|' + salt + '|' + iter;
+  if(_adminKey && _adminKey.tag === tag) return _adminKey.key;
+  const key = await pbkdf2Key(c.clave, b64ToBytes(salt), iter);
+  _adminKey = { tag, key };
+  return key;
+}
+async function encryptAdminState(state, salt){
+  const key = await adminKey(salt, ADMIN_ITER);
+  const e = await aesEncrypt(key, JSON.stringify(state));
+  return { v: 1, app: 'cuotas-sindicales', salt, iter: ADMIN_ITER, iv: e.iv, ct: e.ct, actualizado: new Date().toISOString(), por: yo() };
+}
+async function decryptAdminState(file){
+  if(!file || file.app !== 'cuotas-sindicales') throw Object.assign(new Error('formato'), { code: 'formato' });
+  const key = await adminKey(file.salt, file.iter || ADMIN_ITER);
+  try{ return JSON.parse(await aesDecrypt(key, file.iv, file.ct)); }
+  catch(e){ throw Object.assign(new Error('clave'), { code: 'clave' }); }
+}
+
+/* =====================================================================
+   CONEXIÓN CON GITHUB (repositorio compartido por los dirigentes)
+   ===================================================================== */
+function conn(){ try{ return JSON.parse(lsGet('cs_conn', 'null') || 'null'); }catch(e){ return null; } }
+function setConn(c){ lsSet('cs_conn', c ? JSON.stringify(c) : null); _adminKey = null; }
+function connected(){ const c = conn(); return !!(c && c.owner && c.repo && c.token && c.clave && c.fileId); }
+function yo(){ return lsGet('cs_yo', '') || 'Dirigente'; }
+function dataName(){ return 'datos-' + conn().fileId + '.enc.json'; }
+function portalName(){ return 'portal-' + conn().fileId + '.json'; }
+function ghFullPath(name){ const c = conn(); const f = (c.folder || '').replace(/^\/+|\/+$/g, ''); return (f ? f + '/' : '') + name; }
+function ghContentsPath(name){ const c = conn(); return `/repos/${encodeURIComponent(c.owner)}/${encodeURIComponent(c.repo)}/contents/${ghFullPath(name).split('/').map(encodeURIComponent).join('/')}`; }
+async function gh(path, opts){
+  const c = conn();
+  const res = await fetch('https://api.github.com' + path, Object.assign({}, opts || {}, {
+    headers: Object.assign({ 'Accept': 'application/vnd.github+json', 'Authorization': 'Bearer ' + c.token, 'X-GitHub-Api-Version': '2022-11-28' }, (opts && opts.headers) || {}),
+    cache: 'no-store',
+  }));
+  let body = null;
+  try{ body = await res.json(); }catch(e){}
+  return { res, body };
+}
+function ghError(res, body){
+  const msg = (body && body.message) || '';
+  if(!res) return 'No hay conexión a internet.';
+  if(res.status === 401) return 'GitHub no aceptó la llave de acceso (mal copiada o vencida).';
+  if(res.status === 403) return 'La llave no tiene permiso para escribir en el repositorio ("Contents: Read and write").';
+  if(res.status === 404) return 'No se encontró el repositorio, o la llave no tiene acceso a él.';
+  return 'Error de GitHub (' + res.status + ')' + (msg ? ': ' + msg : '');
+}
+async function ghGetFile(name){
+  const c = conn();
+  const q = c.branch ? '?ref=' + encodeURIComponent(c.branch) : '';
+  const { res, body } = await gh(ghContentsPath(name) + q);
+  if(res.status === 404) return null;
+  if(!res.ok) throw Object.assign(new Error(ghError(res, body)), { status: res.status });
+  let text;
+  if(body.content && body.encoding === 'base64') text = b64ToUtf8(body.content);
+  else {
+    // archivos sobre 1 MB: se leen como blob
+    const r2 = await gh(`/repos/${encodeURIComponent(c.owner)}/${encodeURIComponent(c.repo)}/git/blobs/${body.sha}`);
+    if(!r2.res.ok) throw Object.assign(new Error(ghError(r2.res, r2.body)), { status: r2.res.status });
+    text = b64ToUtf8(r2.body.content);
+  }
+  return { sha: body.sha, text };
+}
+async function ghPutFile(name, text, sha, message){
+  const c = conn();
+  const payload = { message, content: utf8ToB64(text) };
+  if(sha) payload.sha = sha;
+  if(c.branch) payload.branch = c.branch;
+  const { res, body } = await gh(ghContentsPath(name), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+  if(!res.ok){
+    const conflict = res.status === 409 || (res.status === 422 && /sha/i.test((body && body.message) || ''));
+    throw Object.assign(new Error(conflict ? 'conflicto' : ghError(res, body)), { status: res.status, conflict });
+  }
+  return body.content && body.content.sha;
+}
+
+/* =====================================================================
+   SINCRONIZACIÓN
+   Sube y baja el archivo cifrado. Si dos dirigentes guardan a la vez,
+   GitHub rechaza al segundo (sha distinto): se vuelve a bajar, se combina
+   registro por registro y se reintenta. Nadie pisa los cambios de otro.
+   ===================================================================== */
+let syncTimer = null, syncRunning = null, syncAgain = false;
+let syncState = { st: 'off', msg: '', at: Number(lsGet('cs_last_sync', '0')) || 0 };
+function scheduleSync(delay){
+  updateChip();
+  if(!connected()) return;
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(()=> syncNow(), delay == null ? 1500 : delay);
+}
+function setSync(st, msg){ syncState.st = st; syncState.msg = msg || ''; if(st === 'ok'){ syncState.at = now(); lsSet('cs_last_sync', String(syncState.at)); } updateChip(); }
+function updateChip(){
+  const el = $('#syncChip'); if(!el) return;
+  el.className = 'sync-chip';
+  if(!connected()){ el.textContent = '💾 Solo este equipo'; el.title = 'Datos guardados solo en este dispositivo'; return; }
+  const dirty = lsGet('cs_dirty', '0') === '1';
+  if(syncState.st === 'busy'){ el.classList.add('busy'); el.textContent = '⟳ Sincronizando…'; }
+  else if(syncState.st === 'error'){ el.classList.add('bad'); el.textContent = '⚠ Sin sincronizar'; el.title = syncState.msg; }
+  else if(dirty){ el.classList.add('busy'); el.textContent = '● Cambios por subir'; }
+  else { el.classList.add('ok'); el.textContent = '✓ Sincronizado'; el.title = syncState.at ? 'Última sincronización: ' + fdatetime(syncState.at) : ''; }
+}
+async function syncNow(opts){
+  if(!connected()) return false;
+  if(!navigator.onLine){ setSync('error', 'Sin conexión a internet. Los cambios quedan guardados en este equipo y se subirán al volver la conexión.'); return false; }
+  if(syncRunning){ syncAgain = true; return syncRunning; }
+  syncRunning = (async ()=>{
+    setSync('busy');
+    const seqStart = changeSeq;
+    const before = canonical(S);
+    try{
+      let ok = false;
+      for(let attempt = 0; attempt < 4 && !ok; attempt++){
+        const remote = await ghGetFile(dataName());
+        let remoteState = null, sha = null, salt = conn().salt;
+        if(remote){
+          sha = remote.sha;
+          const file = JSON.parse(remote.text);
+          salt = file.salt;
+          remoteState = normalizeState(await decryptAdminState(file));
+        }
+        if(!salt){ salt = bytesToB64(crypto.getRandomValues(new Uint8Array(16))); }
+        if(conn().salt !== salt){ const c = conn(); c.salt = salt; setConn(c); }
+        // S pudo cambiar mientras esperábamos: se combina con lo que haya ahora
+        S = remoteState ? mergeStates(S, remoteState) : normalizeState(S);
+        saveLocal();
+        if(remoteState && canonical(S) === canonical(remoteState)){ ok = true; break; }
+        const file = await encryptAdminState(S, salt);
+        try{
+          await ghPutFile(dataName(), JSON.stringify(file), sha, 'Datos cuotas (' + yo() + ')');
+          ok = true;
+        }catch(e){ if(!e.conflict) throw e; await new Promise(r=> setTimeout(r, 500 + Math.random() * 800)); }
+      }
+      if(!ok) throw new Error('No se pudo guardar por cambios simultáneos. Se reintentará.');
+      if(changeSeq === seqStart) lsSet('cs_dirty', '0');
+      setSync('ok');
+      invalidate();
+      if(canonical(S) !== before) softRender();
+      if(S.config.portalAuto) schedulePortal();
+      return true;
+    }catch(e){
+      let msg = e.message || String(e);
+      if(e.code === 'clave') msg = 'La clave compartida no coincide con la del repositorio.';
+      if(e instanceof TypeError) msg = 'No se pudo conectar con GitHub (¿sin internet?).';
+      setSync('error', msg);
+      if(!(opts && opts.silent)) toast('⚠ ' + msg, 'bad');
+      return false;
+    }finally{
+      syncRunning = null;
+      if(syncAgain){ syncAgain = false; scheduleSync(300); }
+    }
+  })();
+  return syncRunning;
+}
+/* Re-dibuja la vista sin interrumpir si el usuario está escribiendo */
+function softRender(){
+  const a = document.activeElement;
+  if(a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.tagName === 'SELECT')){ pendingRender = true; return; }
+  renderView();
+  refreshOpenModal();
+}
+let pendingRender = false;
+document.addEventListener('focusout', ()=>{ if(pendingRender){ setTimeout(()=>{ const a = document.activeElement; if(!a || !/INPUT|TEXTAREA|SELECT/.test(a.tagName)){ pendingRender = false; renderView(); refreshOpenModal(); } }, 200); } });
+window.addEventListener('online', ()=> scheduleSync(200));
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState === 'visible') scheduleSync(300); });
+setInterval(()=>{ if(document.visibilityState === 'visible' && connected() && !syncRunning) syncNow({ silent: true }); }, 90000);
+
+/* =====================================================================
+   PORTAL DE SOCIOS (archivo cifrado por socio: tarjeta QR + PIN)
+   ===================================================================== */
+const PORTAL_ITER = 120000;
+const _socioKeys = new Map();
+async function socioKey(token, pin){
+  const tag = token + ':' + pin;
+  if(_socioKeys.has(tag)) return _socioKeys.get(tag);
+  const salt = (await shaBytes('cs-salt:' + token)).slice(0, 16);
+  const key = await pbkdf2Key(tag, salt, PORTAL_ITER);
+  _socioKeys.set(tag, key);
+  return key;
+}
+function ensureCredenciales(){
+  let n = 0;
+  const used = new Set(S.socios.map(s=> s.token).filter(Boolean));
+  live('socios').forEach(s=>{
+    if(!s.token || !s.pin){
+      if(!s.token){ let t; do{ t = randomToken(16); }while(used.has(t)); used.add(t); s.token = t; }
+      if(!s.pin) s.pin = randomPin();
+      s.u = now(); n++;
+    }
+  });
+  if(n) changed({ noRender: true });
+}
+function portalBaseUrl(){
+  const c = conn();
+  if(c && c.portalUrl) return c.portalUrl;
+  // si la app está publicada en GitHub Pages, el portal está al lado
+  if(/\.github\.io$/i.test(location.hostname)) return location.href.split('#')[0].split('?')[0].replace(/[^/]*$/, '') + 'portal.html';
+  if(!c || !c.owner || !c.repo) return '';
+  const own = c.owner.toLowerCase();
+  const root = c.repo.toLowerCase() === own + '.github.io' ? '' : c.repo + '/';
+  const f = (c.folder || '').replace(/^\/+|\/+$/g, '');
+  return `https://${own}.github.io/${root}${f ? f + '/' : ''}portal.html`;
+}
+function socioPortalUrl(s){ const c = conn(); return portalBaseUrl() + '#f=' + (c ? c.fileId : '') + '&t=' + s.token; }
+function buildPortalPayload(s){
+  const hasta = Math.max(ymToIdx(new Date().getFullYear() + '-12'), ymToIdx(curYm()) + 3);
+  const c = cuentaSocio(s, hasta);
+  return {
+    v: 1,
+    sindicato: S.config.nombre || 'Sindicato',
+    nombre: s.nombre, rut: s.rut ? formatRut(s.rut) : '',
+    cuota: tarifaActual(), dv: diaVenc(),
+    ini: socioInicio(s), fin: s.mesTermino || '',
+    items: c.items.map(it=> ({ t: it.tipo, m: it.mes, c: it.concepto, mo: it.monto, p: it.pagado || 0 })),
+    pagos: c.pagos.slice().sort((a, b)=> (b.fecha || '').localeCompare(a.fecha || '')).slice(0, 60).map(p=> ({ f: p.fecha, mo: Number(p.monto) || 0, me: p.medio || '' })),
+    desc: c.descuentos.map(d=> ({ m: d.mes, mo: Number(d.monto) || 0, c: d.concepto || 'Descuento' })),
+  };
+}
+let portalTimer = null, portalRunning = null;
+function schedulePortal(){ clearTimeout(portalTimer); portalTimer = setTimeout(()=> publishPortal(false, null, true).catch(()=>{}), 4000); }
+async function publishPortal(force, onProgress, silent){
+  if(!connected()) throw new Error('Primero conecta el repositorio en Ajustes.');
+  if(portalRunning) return portalRunning;
+  portalRunning = (async ()=>{
+    ensureCredenciales();
+    const socios = live('socios');
+    const payloads = socios.map(s=> ({ s, p: buildPortalPayload(s) }));
+    const hash = hex(await shaBytes(JSON.stringify(payloads.map(x=> [x.s.token, x.s.pin, x.p])))).slice(0, 20);
+    if(!force && hash === lsGet('cs_portal_hash::' + conn().fileId, '')) return { skipped: true, count: socios.length };
+    const entries = {};
+    let i = 0;
+    for(const { s, p } of payloads){
+      const id = hex(await shaBytes('cs-id:' + s.token)).slice(0, 32);
+      const key = await socioKey(s.token, s.pin);
+      p.generado = new Date().toISOString();
+      entries[id] = await aesEncrypt(key, JSON.stringify(p));
+      i++;
+      if(onProgress) onProgress(i, payloads.length);
+    }
+    const data = { v: 1, app: 'cuotas-portal', generado: new Date().toISOString(), sindicato: S.config.nombre || '', socios: payloads.length, entries };
+    let sha = null;
+    try{ const cur = await ghGetFile(portalName()); sha = cur && cur.sha; }catch(e){ if(e.status) throw e; }
+    try{ await ghPutFile(portalName(), JSON.stringify(data), sha, 'Portal de socios (' + yo() + ')'); }
+    catch(e){ if(e.conflict){ const cur = await ghGetFile(portalName()); await ghPutFile(portalName(), JSON.stringify(data), cur && cur.sha, 'Portal de socios (' + yo() + ')'); } else throw e; }
+    lsSet('cs_portal_hash::' + conn().fileId, hash);
+    lsSet('cs_portal_at', String(now()));
+    if(!silent) toast('✓ Portal publicado (' + payloads.length + ' socios). Puede tardar 1 a 2 minutos en verse.', 'ok');
+    if(currentTab === 'portal') renderView();
+    return { count: payloads.length };
+  })();
+  try{ return await portalRunning; } finally { portalRunning = null; }
+}
+
+/* =====================================================================
+   INTERFAZ: utilidades
+   ===================================================================== */
+function toast(msg, kind, ms){
+  const box = $('#toasts');
+  const t = document.createElement('div');
+  t.className = 'toast' + (kind ? ' ' + kind : '');
+  t.innerHTML = `<span>${esc(msg)}</span><button type="button" aria-label="Cerrar">✕</button>`;
+  t.querySelector('button').onclick = ()=> t.remove();
+  box.appendChild(t);
+  setTimeout(()=> t.remove(), ms || 7000);
+}
+function confirmar(texto, okLabel, danger){
+  return new Promise(resolve=>{
+    openModal({
+      title: ()=> 'Confirmar',
+      body: ()=> `<div>${texto}</div>`,
+      foot: ()=> `<button class="btn" data-act="close-modal">Cancelar</button><button class="btn ${danger ? 'danger' : 'primary'}" id="cfOk">${esc(okLabel || 'Aceptar')}</button>`,
+      onMount: (el)=>{
+        $('#cfOk', el).onclick = ()=>{ el._onClose = null; closeModal(); resolve(true); };
+        el._onClose = ()=> resolve(false);
+      },
+    });
+  });
+}
+function monthOptions(selected, fromIdx, toIdx){
+  let h = '';
+  for(let i = toIdx; i >= fromIdx; i--){ const ym = idxToYm(i); h += `<option value="${ym}" ${ym === selected ? 'selected' : ''}>${esc(mesLabelCap(ym))}</option>`; }
+  return h;
+}
+function chipDeuda(c){
+  if(c.deuda > 0) return `<span class="chip bad">Debe ${clp(c.deuda)}</span>`;
+  if(c.saldoFavor > 0) return `<span class="chip primary">A favor ${clp(c.saldoFavor)}</span>`;
+  return `<span class="chip ok">Al día</span>`;
+}
+function mesesTxt(list){
+  if(!list.length) return '';
+  if(list.length <= 3) return list.map(m=> mesLabel(m, true)).join(', ');
+  return `${list.length} meses (${mesLabel(list[0], true)} a ${mesLabel(list[list.length - 1], true)})`;
+}
+
+/* ---------- Modales (se pueden apilar) ---------- */
+const modalStack = [];
+function openModal(spec){
+  const bg = document.createElement('div');
+  bg.className = 'modal-bg';
+  bg.addEventListener('mousedown', e=>{ if(e.target === bg) bg._down = true; });
+  bg.addEventListener('click', e=>{ if(e.target === bg && bg._down && !spec.sticky) closeModal(); bg._down = false; });
+  $('#modalRoot').appendChild(bg);
+  const m = { el: bg, spec };
+  modalStack.push(m);
+  drawModal(m);
+  document.body.style.overflow = 'hidden';
+  return m;
+}
+function drawModal(m){
+  const sp = m.spec;
+  const scroll = m.el.scrollTop;
+  m.el.innerHTML = `<div class="modal${sp.wide ? ' wide' : ''}" role="dialog" aria-modal="true">
+    <div class="modal-head"><h2>${sp.title()}</h2><button type="button" class="x" data-act="close-modal" aria-label="Cerrar">✕</button></div>
+    <div class="modal-body">${sp.body()}</div>
+    ${sp.foot ? `<div class="modal-foot">${sp.foot()}</div>` : ''}
+  </div>`;
+  m.el.scrollTop = scroll;
+  if(sp.onMount) sp.onMount(m.el, m);
+}
+function closeModal(){
+  const m = modalStack.pop();
+  if(!m) return;
+  if(m.el._onClose) m.el._onClose();
+  m.el.remove();
+  if(!modalStack.length) document.body.style.overflow = '';
+}
+function refreshOpenModal(){ modalStack.forEach(m=>{ if(m.spec.live) drawModal(m); }); }
+document.addEventListener('keydown', e=>{ if(e.key === 'Escape' && modalStack.length) closeModal(); });
+
+/* ---------- Navegación ---------- */
+let currentTab = lsGet('cs_tab', 'inicio');
+const VIEWS = {};
+const ui = { sociosFiltro: 'todos', sociosBusca: '', pagosMes: 'todos', pagosBusca: '' };
+function goTab(t){ currentTab = VIEWS[t] ? t : 'inicio'; lsSet('cs_tab', currentTab); renderView(); window.scrollTo(0, 0); }
+function renderView(){
+  if(!VIEWS[currentTab]) currentTab = 'inicio';
+  $$('#tabs button').forEach(b=> b.classList.toggle('active', b.dataset.tab === currentTab));
+  $('#brandName').textContent = S.config.nombre || 'Cuotas Sindicales';
+  const v = $('#view');
+  v.innerHTML = VIEWS[currentTab]();
+  if(VIEWS[currentTab].mount) VIEWS[currentTab].mount(v);
+  updateChip();
+}
+$('#tabs').addEventListener('click', e=>{ const b = e.target.closest('button[data-tab]'); if(b) goTab(b.dataset.tab); });
+
+/* Acciones con data-act="nombre" (delegación de eventos) */
+const ACT = {};
+document.addEventListener('click', e=>{
+  const el = e.target.closest('[data-act]');
+  if(!el) return;
+  const fn = ACT[el.dataset.act];
+  if(fn){ e.preventDefault(); fn(el, e); }
+});
+ACT['close-modal'] = ()=> closeModal();
+ACT['go'] = el=> goTab(el.dataset.tab);
+ACT['sync-now'] = ()=>{ if(connected()) syncNow(); else { goTab('ajustes'); toast('Conecta el repositorio para compartir los datos con otros dirigentes.'); } };
+ACT['ficha'] = el=> openFicha(el.dataset.id);
+ACT['nuevo-pago'] = el=> openPago({ socioId: el.dataset.id || null });
+ACT['pago-masivo'] = ()=> openPagoMasivo();
+ACT['nuevo-socio'] = ()=> openSocioForm(null);
+ACT['importar-socios'] = ()=> openImportar();
+
+/* =====================================================================
+   VISTA: INICIO
+   ===================================================================== */
+VIEWS.inicio = function(){
+  const socios = live('socios');
+  const sinTarifa = live('tarifas').length === 0;
+  if(!S.config.nombre || sinTarifa || socios.length === 0){
+    return `<div class="card welcome">
+      <div class="big">✊</div>
+      <h2>Bienvenido/a a Cuotas Sindicales</h2>
+      <p class="dim">Lleva el registro de pagos de cuotas y la deuda de cada socio. Cada socio puede revisar su estado de cuenta escaneando su tarjeta QR e ingresando su PIN.</p>
+      <h3>Primeros pasos</h3>
+      <ol class="steps">
+        <li>${S.config.nombre ? '✅' : '⬜'} Nombre del sindicato</li>
+        <li>${sinTarifa ? '⬜' : '✅'} Valor de la cuota mensual</li>
+        <li>${socios.length ? '✅' : '⬜'} Lista de socios</li>
+        <li>${connected() ? '✅' : '⬜'} (Opcional) Conectar el repositorio para compartir con otros dirigentes y publicar el portal</li>
+      </ol>
+      ${(!S.config.nombre || sinTarifa) ? `
+      <div class="grid2" style="margin-top:14px">
+        <label class="f span2">Nombre del sindicato<input id="wNombre" value="${esc(S.config.nombre)}" placeholder="Ej: Sindicato de Trabajadores…"></label>
+        ${sinTarifa ? `<label class="f">Cuota mensual ($)<input id="wCuota" inputmode="numeric" placeholder="Ej: 5.000"></label>
+        <label class="f">Se cobra desde<input id="wDesde" type="month" value="${esc(S.config.mesInicioDefault || curYm())}"></label>` : ''}
+        <label class="f">Día de vencimiento de la cuota<input id="wDia" type="number" min="1" max="28" value="${diaVenc()}"></label>
+      </div>
+      <div class="btn-row" style="margin-top:12px"><button class="btn primary" data-act="welcome-save">Guardar y continuar</button></div>
+      ` : `<div class="btn-row" style="margin-top:12px"><button class="btn primary" data-act="nuevo-socio">+ Agregar socio</button><button class="btn" data-act="importar-socios">📋 Pegar lista desde Excel</button></div>`}
+      <div class="note" style="margin-top:14px">¿Otro dirigente ya creó el sistema? Pídele un <b>enlace de invitación</b> y ábrelo en este equipo, o pégalo en <a href="#" data-act="go" data-tab="ajustes">Ajustes</a>.</div>
+    </div>`;
+  }
+  const r = resumenGeneral();
+  const deudores = sociosOrdenados(socios).map(s=> ({ s, c: cuentaSocio(s) })).filter(x=> x.c.deuda > 0).sort((a, b)=> b.c.deuda - a.c.deuda);
+  const ult = live('pagos').slice().sort((a, b)=> (b.fecha || '').localeCompare(a.fecha || '') || (b.u - a.u)).slice(0, 6);
+  const dv = diaVenc(), hoy = new Date().getDate();
+  return `
+  <div class="tiles">
+    <div class="tile accent"><div class="num">${clp(r.recaudadoMes)}</div><div class="lbl">Recaudado en ${esc(MESES[new Date().getMonth()])}</div></div>
+    <div class="tile"><div class="num ok">${r.alDia}<span class="dim small"> / ${r.activos}</span></div><div class="lbl">Socios al día</div></div>
+    <div class="tile"><div class="num ${r.conDeuda ? 'bad' : ''}">${r.conDeuda}</div><div class="lbl">Socios con deuda</div></div>
+    <div class="tile"><div class="num ${r.deudaTotal ? 'bad' : ''}">${clp(r.deudaTotal)}</div><div class="lbl">Deuda total vencida</div></div>
+  </div>
+  <div class="quick">
+    <button class="btn primary" data-act="nuevo-pago">💵 Registrar pago</button>
+    <button class="btn" data-act="pago-masivo">🗂️ Pago masivo del mes</button>
+    <button class="btn" data-act="nuevo-socio">👤 Nuevo socio</button>
+  </div>
+  <div class="note">Cuota actual: <b>${clp(tarifaActual())}</b> · vence el día <b>${dv}</b> de cada mes. ${hoy < dv ? `La cuota de ${esc(MESES[new Date().getMonth()])} aún no vence, por eso no cuenta como deuda.` : `La cuota de ${esc(MESES[new Date().getMonth()])} ya venció.`}</div>
+  <div class="card">
+    <div class="card-head"><h2>Socios con deuda</h2>${deudores.length > 8 ? `<button class="btn ghost" data-act="ver-deudores">Ver todos (${deudores.length})</button>` : ''}</div>
+    ${deudores.length ? deudores.slice(0, 8).map(({ s, c })=> `
+      <div class="row click" data-act="ficha" data-id="${s.id}">
+        <div class="main"><div class="title">${esc(s.nombre)}</div><div class="sub">${c.mesesAdeudados.length ? 'Adeuda ' + esc(mesesTxt(c.mesesAdeudados)) : 'Cobros pendientes'}</div></div>
+        <div class="val bad">${clp(c.deuda)}</div>
+      </div>`).join('') : `<div class="empty">🎉 Todos los socios están al día.</div>`}
+    ${r.deudaRetirados > 0 ? `<div class="note warn">Además hay ${clp(r.deudaRetirados)} de deuda pendiente de socios retirados.</div>` : ''}
+  </div>
+  <div class="card">
+    <div class="card-head"><h2>Últimos pagos</h2><button class="btn ghost" data-act="go" data-tab="pagos">Ver todos</button></div>
+    ${ult.length ? ult.map(p=>{ const s = getById('socios', p.socioId); return `
+      <div class="row"><div class="main"><div class="title">${esc(s ? s.nombre : '(socio eliminado)')}</div><div class="sub">${fdate(p.fecha)} · ${esc(p.medio || '')}${p.por ? ' · registró ' + esc(p.por) : ''}</div></div><div class="val ok">${clp(p.monto)}</div></div>`; }).join('') : `<div class="empty">Aún no hay pagos registrados.</div>`}
+  </div>`;
+};
+ACT['welcome-save'] = ()=>{
+  const nombre = $('#wNombre').value.trim();
+  const cuota = $('#wCuota') ? parseMonto($('#wCuota').value) : tarifaActual();
+  const desde = ($('#wDesde') && $('#wDesde').value) || curYm();
+  const dia = Math.min(28, Math.max(1, parseInt($('#wDia').value, 10) || 10));
+  if(!nombre){ toast('Escribe el nombre del sindicato.', 'bad'); return; }
+  if(cuota <= 0){ toast('Indica el valor de la cuota mensual.', 'bad'); return; }
+  if(live('tarifas').length === 0){ S.tarifas.push({ id: uid(), desde, monto: cuota, u: now() }); setConfig({ nombre, mesInicioDefault: desde, diaVencimiento: dia }); }
+  else setConfig({ nombre, diaVencimiento: dia });
+  toast('✓ Datos guardados. Ahora agrega a los socios.', 'ok');
+};
+ACT['ver-deudores'] = ()=>{ ui.sociosFiltro = 'deuda'; goTab('socios'); };
+
+/* =====================================================================
+   VISTA: SOCIOS
+   ===================================================================== */
+VIEWS.socios = function(){
+  const all = sociosOrdenados();
+  const f = ui.sociosFiltro;
+  const q = normTxt(ui.sociosBusca);
+  const rows = all.map(s=> ({ s, c: cuentaSocio(s) })).filter(({ s, c })=>{
+    if(f === 'retirados' && socioActivo(s)) return false;
+    if(f !== 'retirados' && f !== 'todos' && !socioActivo(s)) return false;
+    if(f === 'deuda' && c.deuda <= 0) return false;
+    if(f === 'aldia' && c.deuda > 0) return false;
+    if(q && !normTxt(s.nombre + ' ' + (s.rut || '') + ' ' + formatRut(s.rut)).includes(q)) return false;
+    return true;
+  });
+  if(f === 'deuda') rows.sort((a, b)=> b.c.deuda - a.c.deuda);
+  const cnt = k=> all.filter(s=> k === 'retirados' ? !socioActivo(s) : socioActivo(s) && (k === 'todos' || (k === 'deuda' ? cuentaSocio(s).deuda > 0 : cuentaSocio(s).deuda <= 0))).length;
+  return `
+  <div class="card">
+    <div class="card-head"><h2>Socios (${all.filter(socioActivo).length} activos)</h2>
+      <div class="btn-row"><button class="btn primary sm" data-act="nuevo-socio">+ Socio</button><button class="btn sm" data-act="importar-socios">📋 Pegar lista</button></div></div>
+    <div class="toolbar">
+      <input type="search" id="sBusca" placeholder="Buscar por nombre o RUT…" value="${esc(ui.sociosBusca)}">
+      <div class="seg" id="sFiltro">
+        ${[['todos', 'Activos'], ['deuda', 'Con deuda'], ['aldia', 'Al día'], ['retirados', 'Retirados']].map(([k, l])=> `<button type="button" data-f="${k}" class="${f === k ? 'active' : ''}">${l} (${k === 'todos' ? all.filter(socioActivo).length : cnt(k)})</button>`).join('')}
+      </div>
+    </div>
+    <div id="sLista">${sociosRows(rows)}</div>
+  </div>`;
+};
+function sociosRows(rows){
+  if(!rows.length) return `<div class="empty">${live('socios').length ? 'No hay socios con ese filtro.' : 'Aún no hay socios. Agrégalos uno a uno o pega la lista desde Excel.'}</div>`;
+  return rows.map(({ s, c })=> `
+    <div class="row click" data-act="ficha" data-id="${s.id}">
+      <div class="main"><div class="title">${esc(s.nombre)}</div>
+        <div class="sub">${s.rut ? esc(formatRut(s.rut)) + ' · ' : ''}socio desde ${esc(mesLabel(socioInicio(s), true))}${s.mesTermino ? ' · retirado en ' + esc(mesLabel(s.mesTermino, true)) : ''}${c.mesesAdeudados.length ? ' · <b>' + c.mesesAdeudados.length + (c.mesesAdeudados.length === 1 ? ' mes' : ' meses') + ' adeudado' + (c.mesesAdeudados.length === 1 ? '' : 's') + '</b>' : ''}</div></div>
+      ${chipDeuda(c)}
+    </div>`).join('');
+}
+VIEWS.socios.mount = function(v){
+  const inp = $('#sBusca', v);
+  inp.addEventListener('input', ()=>{
+    ui.sociosBusca = inp.value;
+    const pos = inp.selectionStart;
+    renderView();
+    const n = $('#sBusca'); n.focus(); try{ n.setSelectionRange(pos, pos); }catch(e){}
+  });
+  $('#sFiltro', v).addEventListener('click', e=>{ const b = e.target.closest('button[data-f]'); if(b){ ui.sociosFiltro = b.dataset.f; renderView(); } });
+};
+
+/* ---------- Formulario de socio ---------- */
+function openSocioForm(id){
+  const s = id ? Object.assign({}, getById('socios', id)) : { id: uid(), nombre: '', rut: '', email: '', telefono: '', mesInicio: S.config.mesInicioDefault || curYm(), mesTermino: '', notas: '' };
+  openModal({
+    title: ()=> id ? 'Editar socio' : 'Nuevo socio',
+    body: ()=> `<div class="grid2">
+      <label class="f span2">Nombre completo *<input id="fNombre" value="${esc(s.nombre)}" autocomplete="off"></label>
+      <label class="f">RUT<input id="fRut" value="${esc(s.rut ? formatRut(s.rut) : '')}" placeholder="12.345.678-9" autocomplete="off"></label>
+      <label class="f">Teléfono<input id="fTel" type="tel" value="${esc(s.telefono || '')}"></label>
+      <label class="f span2">Correo<input id="fEmail" type="email" value="${esc(s.email || '')}"></label>
+      <label class="f">Paga cuota desde *<input id="fIni" type="month" value="${esc(s.mesInicio || '')}"></label>
+      <label class="f">Retiro del sindicato (mes)<input id="fFin" type="month" value="${esc(s.mesTermino || '')}"></label>
+      <label class="f span2">Notas internas<textarea id="fNotas" placeholder="Solo las ven los dirigentes">${esc(s.notas || '')}</textarea></label>
+    </div>
+    <div class="note small">Desde el mes indicado se cobra la cuota automáticamente. Si el socio se retira, indica el mes de retiro: se dejan de cobrar cuotas desde el mes siguiente, pero su deuda anterior se mantiene.</div>`,
+    foot: ()=> `${id ? '<button class="btn danger" id="fDel">Eliminar</button><span style="flex:1"></span>' : ''}<button class="btn" data-act="close-modal">Cancelar</button><button class="btn primary" id="fSave">Guardar</button>`,
+    onMount: (el)=>{
+      $('#fNombre', el).focus();
+      $('#fRut', el).addEventListener('blur', e=>{ if(e.target.value.trim()) e.target.value = formatRut(e.target.value); });
+      $('#fSave', el).onclick = ()=>{
+        const nombre = $('#fNombre', el).value.trim().replace(/\s+/g, ' ');
+        const rut = $('#fRut', el).value.trim();
+        const ini = $('#fIni', el).value;
+        const fin = $('#fFin', el).value;
+        if(!nombre){ toast('Escribe el nombre del socio.', 'bad'); return; }
+        if(!ini){ toast('Indica desde qué mes paga cuota.', 'bad'); return; }
+        if(fin && ymToIdx(fin) < ymToIdx(ini)){ toast('El mes de retiro no puede ser anterior al de ingreso.', 'bad'); return; }
+        if(rut && !rutValido(rut) && !confirm('El RUT parece no ser válido (dígito verificador). ¿Guardar igual?')) return;
+        const dup = live('socios').find(x=> x.id !== s.id && rut && x.rut && x.rut.replace(/[^0-9K]/gi, '').toUpperCase() === rut.replace(/[^0-9K]/gi, '').toUpperCase());
+        if(dup && !confirm('Ya existe un socio con ese RUT (' + dup.nombre + '). ¿Guardar igual?')) return;
+        Object.assign(s, { nombre, rut: rut ? formatRut(rut) : '', telefono: $('#fTel', el).value.trim(), email: $('#fEmail', el).value.trim(), mesInicio: ini, mesTermino: fin || '', notas: $('#fNotas', el).value.trim() });
+        if(!s.token) s.token = randomToken(16);
+        if(!s.pin) s.pin = randomPin();
+        closeModal();
+        upsert('socios', s);
+        toast(id ? '✓ Socio actualizado' : '✓ Socio agregado', 'ok');
+        refreshOpenModal();
+      };
+      if(id) $('#fDel', el).onclick = async ()=>{
+        const c = cuentaSocio(getById('socios', id));
+        const nP = c.pagos.length;
+        const ok = await confirmar(`<p>¿Eliminar a <b>${esc(s.nombre)}</b>?</p>${nP ? `<p class="note bad">Tiene ${nP} pago(s) registrados, que también dejarán de verse. Si dejó el sindicato, es mejor indicar el <b>mes de retiro</b>: así se conserva su historial y su deuda.</p>` : ''}`, 'Eliminar', true);
+        if(!ok) return;
+        closeModal();
+        while(modalStack.length) closeModal();
+        removeRec('socios', id);
+        toast('Socio eliminado');
+      };
+    },
+  });
+}
+
+/* ---------- Importar lista ---------- */
+function parseMesFlexible(str){
+  const t = String(str || '').trim();
+  let m = t.match(/^(\d{4})[-/.](\d{1,2})/); if(m) return m[1] + '-' + pad2(m[2]);
+  m = t.match(/^(\d{1,2})[-/.](\d{4})$/); if(m) return m[2] + '-' + pad2(m[1]);
+  m = t.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/); if(m) return m[3] + '-' + pad2(m[2]);
+  const n = normTxt(t); const mi = MESES.findIndex(x=> n.startsWith(x.slice(0, 3))); const y = (t.match(/\d{4}/) || [])[0];
+  if(mi >= 0 && y) return y + '-' + pad2(mi + 1);
+  return '';
+}
+function parseLista(txt){
+  const out = [];
+  txt.split(/\r?\n/).forEach(line=>{
+    if(!line.trim()) return;
+    const parts = line.split(/\t|;|\|/).map(x=> x.trim());
+    let nombre = '', rut = '', mes = '';
+    parts.forEach(p=>{
+      if(!p) return;
+      if(!rut && /^\d{1,2}\.?\d{3}\.?\d{3}-?[\dkK]$/.test(p.replace(/\s/g, ''))) rut = p;
+      else if(!mes && parseMesFlexible(p)) mes = parseMesFlexible(p);
+      else if(!nombre) nombre = p;
+    });
+    if(nombre && !/^nombre/i.test(nombre)) out.push({ nombre: nombre.replace(/\s+/g, ' '), rut, mes });
+  });
+  return out;
+}
+function openImportar(){
+  openModal({
+    title: ()=> 'Pegar lista de socios',
+    body: ()=> `<p class="dim small">Copia las columnas desde Excel y pégalas aquí, <b>un socio por línea</b>. Se reconocen el <b>nombre</b>, el <b>RUT</b> y (opcional) el <b>mes de ingreso</b> (ej. 03/2026 o 2026-03). También sirve separar con punto y coma.</p>
+      <textarea id="iTxt" style="min-height:180px" placeholder="Juana Pérez Soto&#9;12.345.678-5&#9;03/2026&#10;Pedro González&#9;9.876.543-3"></textarea>
+      <label class="f" style="margin-top:10px">Si no se indica mes de ingreso, pagan cuota desde<input id="iMes" type="month" value="${esc(S.config.mesInicioDefault || curYm())}"></label>
+      <div id="iPrev" class="preview" style="display:none"></div>`,
+    foot: ()=> `<button class="btn" data-act="close-modal">Cancelar</button><button class="btn primary" id="iOk" disabled>Agregar</button>`,
+    onMount: (el)=>{
+      const upd = ()=>{
+        const list = parseLista($('#iTxt', el).value);
+        const existing = new Set(live('socios').map(s=> s.rut ? s.rut.replace(/[^0-9K]/gi, '').toUpperCase() : 'N:' + normTxt(s.nombre)));
+        const nuevos = list.filter(x=> !existing.has(x.rut ? x.rut.replace(/[^0-9K]/gi, '').toUpperCase() : 'N:' + normTxt(x.nombre)));
+        el._list = nuevos;
+        const p = $('#iPrev', el);
+        p.style.display = list.length ? '' : 'none';
+        p.innerHTML = `Se agregarán <b>${nuevos.length}</b> socio(s)${list.length - nuevos.length ? ` · ${list.length - nuevos.length} ya existían y se omiten` : ''}.` + (nuevos.length ? `<br><span class="tiny">${nuevos.slice(0, 4).map(x=> esc(x.nombre) + (x.rut ? ' (' + esc(formatRut(x.rut)) + ')' : '') + (x.mes ? ' · ' + esc(mesLabel(x.mes, true)) : '')).join(' · ')}${nuevos.length > 4 ? ' …' : ''}</span>` : '');
+        $('#iOk', el).disabled = !nuevos.length;
+      };
+      $('#iTxt', el).addEventListener('input', upd);
+      $('#iOk', el).onclick = ()=>{
+        const def = $('#iMes', el).value || curYm();
+        const t = now();
+        el._list.forEach(x=> S.socios.push({ id: uid(), nombre: x.nombre, rut: x.rut ? formatRut(x.rut) : '', email: '', telefono: '', mesInicio: x.mes || def, mesTermino: '', notas: '', token: randomToken(16), pin: randomPin(), u: t }));
+        const n = el._list.length;
+        closeModal();
+        changed();
+        toast(`✓ ${n} socio(s) agregados`, 'ok');
+      };
+    },
+  });
+}
+
+/* =====================================================================
+   FICHA DEL SOCIO (estado de cuenta)
+   ===================================================================== */
+const fichaYear = {};
+function openFicha(id){
+  if(!getById('socios', id)) return;
+  if(!fichaYear[id]) fichaYear[id] = new Date().getFullYear();
+  openModal({
+    live: true, wide: true,
+    title: ()=>{ const s = getById('socios', id); return s ? esc(s.nombre) : 'Socio eliminado'; },
+    body: ()=> fichaBody(id),
+    onMount: (el)=>{
+      const yb = $('#fyPrev', el), yn = $('#fyNext', el);
+      if(yb) yb.onclick = ()=>{ fichaYear[id]--; refreshOpenModal(); };
+      if(yn) yn.onclick = ()=>{ fichaYear[id]++; refreshOpenModal(); };
+    },
+  });
+}
+function fichaBody(id){
+  const s = getById('socios', id);
+  if(!s) return `<div class="empty">Este socio fue eliminado.</div>`;
+  const c = cuentaSocio(s);
+  const y = fichaYear[id];
+  const meses = estadoMeses(s, y);
+  const minY = Math.floor(ymToIdx(socioInicio(s)) / 12), maxY = new Date().getFullYear() + 1;
+  const pend = c.items.filter(it=> it.vencido && it.monto > 0 && it.estado !== 'pagado');
+  const extras = c.items.filter(it=> it.tipo !== 'cuota' && it.tipo !== 'exento');
+  const pagos = c.pagos.slice().sort((a, b)=> (b.fecha || '').localeCompare(a.fecha || '') || b.u - a.u);
+  const ajustes = live('ajustes').filter(a=> a.socioId === id).sort((a, b)=> (b.mes || '').localeCompare(a.mes || ''));
+  return `
+  <div class="btn-row" style="margin:-4px 0 12px">${chipDeuda(c)}${!socioActivo(s) ? '<span class="chip neutral">Retirado/a en ' + esc(mesLabel(s.mesTermino)) + '</span>' : ''}${s.rut ? `<span class="chip neutral">${esc(formatRut(s.rut))}</span>` : ''}<span class="chip neutral">Socio/a desde ${esc(mesLabel(socioInicio(s)))}</span></div>
+  <div class="tiles">
+    <div class="tile"><div class="num ${c.deuda ? 'bad' : 'ok'}">${clp(c.deuda)}</div><div class="lbl">Deuda vencida</div></div>
+    <div class="tile"><div class="num">${c.mesesAdeudados.length}</div><div class="lbl">Meses adeudados</div></div>
+    <div class="tile"><div class="num">${clp(c.totalPagos)}</div><div class="lbl">Total pagado</div></div>
+    <div class="tile"><div class="num" style="font-size:1.1rem">${c.ultimoPago ? fdate(c.ultimoPago.fecha) : '—'}</div><div class="lbl">Último pago${c.ultimoPago ? ' · ' + clp(c.ultimoPago.monto) : ''}</div></div>
+  </div>
+  <div class="btn-row" style="margin-bottom:14px">
+    <button class="btn primary" data-act="nuevo-pago" data-id="${id}">💵 Registrar pago</button>
+    <button class="btn" data-act="ajuste" data-id="${id}">➕ Exención / cargo / descuento</button>
+    <button class="btn" data-act="tarjeta" data-id="${id}">🪪 Tarjeta y PIN</button>
+    <button class="btn" data-act="print-estado" data-id="${id}">🖨️ Estado de cuenta</button>
+    <button class="btn" data-act="editar-socio" data-id="${id}">✏️ Editar datos</button>
+  </div>
+  ${c.mesesAdeudados.length ? `<div class="note bad">Adeuda: ${c.mesesAdeudados.map(m=> esc(mesLabel(m, true))).join(', ')}</div>` : ''}
+  <div class="card" style="margin-bottom:12px">
+    <div class="yearbar"><button class="btn sm" id="fyPrev" ${y <= minY ? 'disabled' : ''}>‹</button><b>${y}</b><button class="btn sm" id="fyNext" ${y >= maxY ? 'disabled' : ''}>›</button><span class="dim small">Cuotas mensuales</span></div>
+    <div class="months">${meses.map(m=> `<div class="mcell ${m.st}" title="${esc(m.item && m.item.motivo ? m.item.motivo : '')}"><b>${MESES_C[Number(m.ym.slice(5)) - 1]}</b>${esc(m.txt)}</div>`).join('')}</div>
+    <div class="legend"><span class="chip ok">Pagado</span><span class="chip warn">Pago parcial</span><span class="chip bad">Adeuda</span><span class="chip info">Por vencer</span><span class="chip primary">Pagado por adelantado</span><span class="chip neutral">Exento / no socio</span></div>
+  </div>
+  ${pend.length ? `<h3>Cobros pendientes</h3>
+  <div class="table-wrap"><table class="t"><thead><tr><th>Concepto</th><th class="r">Monto</th><th class="r">Abonado</th><th class="r">Saldo</th></tr></thead><tbody>
+    ${pend.map(it=> `<tr><td>${esc(it.concepto)}</td><td class="r">${clp(it.monto)}</td><td class="r">${it.pagado ? clp(it.pagado) : '—'}</td><td class="r"><b>${clp(it.monto - it.pagado)}</b></td></tr>`).join('')}
+    <tr><td><b>Total adeudado</b></td><td></td><td></td><td class="r"><b>${clp(c.deuda)}</b></td></tr>
+  </tbody></table></div>` : ''}
+  ${extras.length ? `<h3>Cobros extraordinarios y cargos</h3>
+  <div class="table-wrap"><table class="t"><thead><tr><th>Mes</th><th>Concepto</th><th class="r">Monto</th><th>Estado</th></tr></thead><tbody>
+    ${extras.map(it=> `<tr><td>${esc(mesLabel(it.mes, true))}</td><td>${esc(it.concepto)}</td><td class="r">${clp(it.monto)}</td><td>${it.estado === 'pagado' ? '<span class="chip ok">Pagado</span>' : it.estado === 'parcial' ? '<span class="chip warn">Parcial</span>' : it.vencido ? '<span class="chip bad">Pendiente</span>' : '<span class="chip info">Por vencer</span>'}</td></tr>`).join('')}
+  </tbody></table></div>` : ''}
+  <h3>Pagos (${pagos.length})</h3>
+  ${pagos.length ? `<div class="table-wrap"><table class="t"><thead><tr><th>Fecha</th><th class="r">Monto</th><th>Medio</th><th>Registró</th><th></th></tr></thead><tbody>
+    ${pagos.map(p=> `<tr><td>${fdate(p.fecha)}${p.obs ? `<div class="tiny dim">${esc(p.obs)}</div>` : ''}</td><td class="r"><b>${clp(p.monto)}</b></td><td>${esc(p.medio || '')}</td><td class="small dim">${esc(p.por || '')}</td><td class="r"><button class="btn ghost sm" data-act="editar-pago" data-id="${p.id}" title="Editar">✏️</button></td></tr>`).join('')}
+  </tbody></table></div>` : `<div class="empty">Sin pagos registrados.</div>`}
+  ${ajustes.length ? `<h3>Exenciones, cargos y descuentos</h3>
+    ${ajustes.map(a=> `<div class="row"><div class="main"><div class="title">${a.tipo === 'exencion' ? 'Exención de cuota' : a.tipo === 'cargo' ? 'Cargo' : 'Descuento'} · ${esc(mesLabel(a.mes, true))}</div><div class="sub">${esc(a.concepto || '')}${a.por ? ' · ' + esc(a.por) : ''}</div></div>${a.tipo !== 'exencion' ? `<div class="val ${a.tipo === 'cargo' ? 'bad' : 'ok'}">${a.tipo === 'cargo' ? '+' : '−'}${clp(a.monto)}</div>` : ''}<button class="btn ghost sm" data-act="borrar-ajuste" data-id="${a.id}" title="Quitar">🗑️</button></div>`).join('')}` : ''}
+  ${s.notas ? `<div class="note"><b>Notas:</b> ${esc(s.notas)}</div>` : ''}
+  <div class="note small">Los pagos se imputan primero a la deuda más antigua. Si un socio paga de más, el saldo a favor cubre los meses siguientes.</div>`;
+}
+ACT['editar-socio'] = el=> openSocioForm(el.dataset.id);
+ACT['editar-pago'] = el=>{ const p = getById('pagos', el.dataset.id); if(p) openPago({ pago: p }); };
+ACT['borrar-ajuste'] = async el=>{
+  if(!await confirmar('¿Quitar este ajuste? La deuda del socio se recalculará.', 'Quitar', true)) return;
+  removeRec('ajustes', el.dataset.id); refreshOpenModal();
+};
+
+/* =====================================================================
+   REGISTRAR / EDITAR PAGO
+   ===================================================================== */
+function openPago(opts){
+  const editing = opts.pago || null;
+  const st = {
+    socioId: editing ? editing.socioId : (opts.socioId || null),
+    busca: '',
+  };
+  const sugerido = sid=>{ const s = getById('socios', sid); if(!s) return tarifaActual(); const c = cuentaSocio(s); return c.deuda > 0 ? c.deuda : tarifaActual(); };
+  const form = {
+    fecha: editing ? editing.fecha : todayISO(),
+    monto: editing ? editing.monto : (st.socioId ? sugerido(st.socioId) : tarifaActual()),
+    medio: editing ? editing.medio : (lsGet('cs_ultimo_medio', 'Efectivo')),
+    obs: editing ? (editing.obs || '') : '',
+  };
+  const m = openModal({
+    title: ()=> editing ? 'Editar pago' : 'Registrar pago',
+    body: ()=>{
+      const s = st.socioId ? getById('socios', st.socioId) : null;
+      let picker;
+      if(s){
+        const c = cuentaSocio(s);
+        picker = `<div class="sel-socio"><div><div style="font-weight:800">${esc(s.nombre)}</div><div class="small">${c.deuda > 0 ? 'Debe ' + clp(c.deuda) + (c.mesesAdeudados.length ? ' · ' + esc(mesesTxt(c.mesesAdeudados)) : '') : (c.saldoFavor ? 'Saldo a favor ' + clp(c.saldoFavor) : 'Al día')}</div></div>${editing ? '' : '<button class="btn sm" id="pCambiar">Cambiar</button>'}</div>`;
+      } else {
+        picker = `<label class="f">Socio<input id="pBusca" type="search" placeholder="Escribe el nombre o RUT…" value="${esc(st.busca)}" autocomplete="off"></label><div class="picker-list" id="pList">${pickerItems(st.busca)}</div>`;
+      }
+      return `${picker}
+      <div class="grid3" style="margin-top:12px">
+        <label class="f">Monto ($)<input id="pMonto" inputmode="numeric" value="${miles(form.monto)}"></label>
+        <label class="f">Fecha de pago<input id="pFecha" type="date" value="${esc(form.fecha)}"></label>
+        <label class="f">Medio de pago<select id="pMedio">${MEDIOS.map(x=> `<option ${x === form.medio ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select></label>
+        <label class="f span2" style="grid-column:1/-1">Observación (opcional)<input id="pObs" value="${esc(form.obs)}" placeholder="N° de comprobante, transferencia, etc."></label>
+      </div>
+      ${s ? `<div class="btn-row" style="margin-top:8px">${cuentaSocio(s).deuda > 0 ? `<button class="btn sm" data-monto="${cuentaSocio(s).deuda}">Toda la deuda (${clp(cuentaSocio(s).deuda)})</button>` : ''}<button class="btn sm" data-monto="${tarifaActual()}">1 cuota (${clp(tarifaActual())})</button><button class="btn sm" data-monto="${tarifaActual() * 3}">3 cuotas</button><button class="btn sm" data-monto="${tarifaActual() * 12}">12 cuotas</button></div>` : ''}
+      <div id="pPrev"></div>`;
+    },
+    foot: ()=> `${editing ? '<button class="btn danger" id="pDel">Eliminar pago</button><span style="flex:1"></span>' : ''}<button class="btn" data-act="close-modal">Cancelar</button>${editing ? '' : '<button class="btn" id="pOtro">Guardar y otro</button>'}<button class="btn primary" id="pOk">Guardar</button>`,
+    onMount: (el)=>{
+      const readForm = ()=>{ form.monto = parseMonto($('#pMonto', el).value); form.fecha = $('#pFecha', el).value; form.medio = $('#pMedio', el).value; form.obs = $('#pObs', el).value; };
+      const prev = ()=>{
+        const box = $('#pPrev', el);
+        const s = st.socioId ? getById('socios', st.socioId) : null;
+        const monto = parseMonto($('#pMonto', el).value);
+        if(!s || monto <= 0 || editing){ box.innerHTML = ''; return; }
+        const pv = previewPago(s, monto);
+        const parts = [];
+        if(pv.covered.length) parts.push('Cubre: <b>' + pv.covered.map(it=> esc(it.tipo === 'cuota' ? mesLabel(it.mes, true) : it.concepto)).join(', ') + '</b>');
+        if(pv.partial) parts.push('Abona ' + clp(pv.partial.p - pv.partial.it.pagado) + ' a ' + esc(pv.partial.it.tipo === 'cuota' ? mesLabel(pv.partial.it.mes, true) : pv.partial.it.concepto));
+        if(pv.sobrante > 0) parts.push('Queda ' + clp(pv.sobrante) + ' a favor');
+        box.innerHTML = parts.length ? `<div class="preview">${parts.join(' · ')}</div>` : '';
+      };
+      const b = $('#pBusca', el);
+      if(b){
+        b.focus();
+        b.addEventListener('input', ()=>{ st.busca = b.value; $('#pList', el).innerHTML = pickerItems(st.busca); });
+        b.addEventListener('keydown', e=>{ if(e.key === 'Enter'){ const first = $('#pList button', el); if(first){ e.preventDefault(); first.click(); } } });
+        $('#pList', el).addEventListener('click', e=>{
+          const x = e.target.closest('button[data-sid]'); if(!x) return;
+          readForm(); st.socioId = x.dataset.sid; form.monto = sugerido(st.socioId); drawModal(m);
+          setTimeout(()=>{ const i = $('#pMonto', m.el); if(i){ i.focus(); i.select(); } }, 30);
+        });
+      }
+      const cam = $('#pCambiar', el); if(cam) cam.onclick = ()=>{ readForm(); st.socioId = null; drawModal(m); };
+      $$('[data-monto]', el).forEach(x=> x.onclick = ()=>{ $('#pMonto', el).value = miles(x.dataset.monto); prev(); });
+      const mi = $('#pMonto', el);
+      mi.addEventListener('input', prev);
+      mi.addEventListener('blur', ()=>{ const v = parseMonto(mi.value); mi.value = v ? miles(v) : ''; });
+      prev();
+      const save = (otro)=>{
+        readForm();
+        if(!st.socioId){ toast('Elige el socio.', 'bad'); return; }
+        if(form.monto <= 0){ toast('Indica un monto mayor a cero.', 'bad'); return; }
+        if(!form.fecha){ toast('Indica la fecha del pago.', 'bad'); return; }
+        const s = getById('socios', st.socioId);
+        const rec = editing ? Object.assign({}, editing) : { id: uid(), socioId: st.socioId, por: yo(), creado: now() };
+        Object.assign(rec, { monto: form.monto, fecha: form.fecha, medio: form.medio, obs: form.obs.trim() });
+        if(editing) rec.editadoPor = yo();
+        lsSet('cs_ultimo_medio', form.medio);
+        upsert('pagos', rec);
+        toast(`✓ Pago de ${clp(form.monto)} registrado para ${s ? s.nombre : ''}`, 'ok');
+        if(otro){
+          st.socioId = null; st.busca = ''; form.monto = tarifaActual(); form.obs = '';
+          drawModal(m);
+        } else { closeModal(); }
+        refreshOpenModal();
+      };
+      $('#pOk', el).onclick = ()=> save(false);
+      const o = $('#pOtro', el); if(o) o.onclick = ()=> save(true);
+      const d = $('#pDel', el);
+      if(d) d.onclick = async ()=>{
+        if(!await confirmar(`¿Eliminar el pago de <b>${clp(editing.monto)}</b> del ${fdate(editing.fecha)}? La deuda del socio se recalculará.`, 'Eliminar', true)) return;
+        closeModal(); removeRec('pagos', editing.id); refreshOpenModal(); toast('Pago eliminado');
+      };
+    },
+  });
+}
+function pickerItems(q){
+  q = normTxt(q);
+  const list = sociosOrdenados().filter(s=> !q || normTxt(s.nombre + ' ' + (s.rut || '') + ' ' + String(s.rut || '').replace(/[^0-9kK]/g, '')).includes(q.replace(/\./g, ''))
+    || normTxt(s.nombre).includes(q));
+  if(!list.length) return `<div class="empty">No hay socios que coincidan.</div>`;
+  return list.slice(0, 60).map(s=>{ const c = cuentaSocio(s); return `<button type="button" data-sid="${s.id}"><span><b>${esc(s.nombre)}</b>${!socioActivo(s) ? ' <span class="chip neutral">retirado</span>' : ''}</span>${c.deuda > 0 ? `<span class="val bad">${clp(c.deuda)}</span>` : '<span class="chip ok">Al día</span>'}</button>`; }).join('');
+}
+
+/* =====================================================================
+   PAGO MASIVO (ej. descuento por planilla de todo un mes)
+   ===================================================================== */
+function openPagoMasivo(){
+  const st = { mes: curYm(), fecha: todayISO(), medio: 'Descuento por planilla', sel: null, montos: {} };
+  const m = openModal({
+    wide: true,
+    title: ()=> 'Pago masivo del mes',
+    body: ()=>{
+      const mi = ymToIdx(st.mes);
+      const socios = sociosOrdenados().filter(s=> ymToIdx(socioInicio(s)) <= mi && (!s.mesTermino || ymToIdx(s.mesTermino) >= mi));
+      const filas = socios.map(s=>{
+        const c = cuentaSocio(s, mi);
+        const it = c.items.find(x=> x.mes === st.mes && x.tipo === 'cuota');
+        const ex = c.items.find(x=> x.mes === st.mes && x.tipo === 'exento');
+        const pagado = it && it.estado === 'pagado';
+        return { s, c, it, ex, pagado };
+      });
+      if(st.sel === null){ st.sel = new Set(filas.filter(f=> f.it && !f.pagado).map(f=> f.s.id)); }
+      const total = filas.filter(f=> st.sel.has(f.s.id)).reduce((a, f)=> a + (st.montos[f.s.id] != null ? st.montos[f.s.id] : tarifaDe(st.mes)), 0);
+      return `<div class="grid3">
+        <label class="f">Mes de la cuota<select id="mMes">${monthOptions(st.mes, ymToIdx(curYm()) - 24, ymToIdx(curYm()) + 2)}</select></label>
+        <label class="f">Fecha de pago<input id="mFecha" type="date" value="${esc(st.fecha)}"></label>
+        <label class="f">Medio de pago<select id="mMedio">${MEDIOS.map(x=> `<option ${x === st.medio ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select></label>
+      </div>
+      <div class="note small">Marca a quienes pagaron. Cada marca crea un pago por el monto indicado (cuota de ${esc(mesLabel(st.mes))}: <b>${clp(tarifaDe(st.mes))}</b>). Si un socio tiene deuda anterior, su pago se imputa primero a lo más antiguo.</div>
+      <div class="toolbar"><button class="btn sm" id="mTodos">Marcar todos los pendientes</button><button class="btn sm" id="mNinguno">Desmarcar todos</button><span class="dim small" style="margin-left:auto" id="mInfo">Seleccionados: <b>${st.sel.size}</b> · Total: <b>${clp(total)}</b></span></div>
+      <div class="table-wrap" style="max-height:52vh;overflow:auto"><table class="t"><thead><tr><th style="width:36px"></th><th>Socio</th><th>Estado de ${esc(mesLabel(st.mes, true))}</th><th class="r" style="width:130px">Monto</th></tr></thead><tbody>
+      ${filas.map(f=> `<tr class="${f.pagado || f.ex ? 'done' : ''}">
+        <td><input type="checkbox" class="mChk" data-id="${f.s.id}" ${st.sel.has(f.s.id) ? 'checked' : ''} style="width:20px;height:20px"></td>
+        <td><b>${esc(f.s.nombre)}</b>${f.c.deuda > 0 ? `<div class="tiny" style="color:var(--bad)">Deuda total ${clp(f.c.deuda)}</div>` : ''}</td>
+        <td>${f.ex ? '<span class="chip neutral">Exento</span>' : f.pagado ? '<span class="chip ok">Ya pagado</span>' : f.it && f.it.estado === 'parcial' ? '<span class="chip warn">Parcial</span>' : '<span class="chip bad">Pendiente</span>'}</td>
+        <td class="r"><input class="mMonto" data-id="${f.s.id}" inputmode="numeric" value="${miles(st.montos[f.s.id] != null ? st.montos[f.s.id] : tarifaDe(st.mes))}" style="text-align:right"></td>
+      </tr>`).join('') || `<tr><td colspan="4" class="empty">No hay socios activos en ese mes.</td></tr>`}
+      </tbody></table></div>`;
+    },
+    foot: ()=> `<button class="btn" data-act="close-modal">Cancelar</button><button class="btn primary" id="mOk">Registrar ${st.sel ? st.sel.size : 0} pago(s)</button>`,
+    onMount: (el)=>{
+      const keep = ()=>{ st.fecha = $('#mFecha', el).value; st.medio = $('#mMedio', el).value; };
+      $('#mMes', el).onchange = e=>{ keep(); st.mes = e.target.value; st.sel = null; st.montos = {}; drawModal(m); };
+      $('#mTodos', el).onclick = ()=>{ keep(); st.sel = null; drawModal(m); };
+      $('#mNinguno', el).onclick = ()=>{ keep(); st.sel = new Set(); drawModal(m); };
+      const totals = ()=>{
+        let tot = 0; st.sel.forEach(id=> tot += st.montos[id] != null ? st.montos[id] : tarifaDe(st.mes));
+        $('#mInfo', el).innerHTML = `Seleccionados: <b>${st.sel.size}</b> · Total: <b>${clp(tot)}</b>`;
+        $('#mOk', el).textContent = `Registrar ${st.sel.size} pago(s)`;
+      };
+      $$('.mChk', el).forEach(c=> c.onchange = ()=>{ if(c.checked) st.sel.add(c.dataset.id); else st.sel.delete(c.dataset.id); totals(); });
+      $$('.mMonto', el).forEach(i=>{
+        i.oninput = ()=>{ st.montos[i.dataset.id] = parseMonto(i.value); totals(); };
+        i.onblur = ()=>{ const v = parseMonto(i.value); i.value = miles(v); };
+      });
+      $('#mOk', el).onclick = ()=>{
+        keep();
+        if(!st.sel.size){ toast('No hay socios marcados.', 'bad'); return; }
+        if(!st.fecha){ toast('Indica la fecha.', 'bad'); return; }
+        const t = now(); let n = 0, total = 0;
+        st.sel.forEach(id=>{
+          const monto = st.montos[id] != null ? st.montos[id] : tarifaDe(st.mes);
+          if(monto > 0){ S.pagos.push({ id: uid(), socioId: id, monto, fecha: st.fecha, medio: st.medio, obs: 'Cuota ' + mesLabel(st.mes), por: yo(), creado: t, u: t }); n++; total += monto; }
+        });
+        lsSet('cs_ultimo_medio', st.medio);
+        closeModal();
+        changed();
+        toast(`✓ ${n} pago(s) registrados por ${clp(total)}`, 'ok');
+      };
+    },
+  });
+}
+
+/* =====================================================================
+   EXENCIÓN / CARGO / DESCUENTO
+   ===================================================================== */
+ACT['ajuste'] = el=>{
+  const sid = el.dataset.id;
+  const s = getById('socios', sid);
+  const st = { tipo: 'exencion' };
+  const m = openModal({
+    title: ()=> 'Ajuste para ' + esc(s.nombre),
+    body: ()=> `<div class="seg" id="aTipo" style="margin-bottom:12px">
+        <button type="button" data-t="exencion" class="${st.tipo === 'exencion' ? 'active' : ''}">Exención de cuota</button>
+        <button type="button" data-t="cargo" class="${st.tipo === 'cargo' ? 'active' : ''}">Cargo adicional</button>
+        <button type="button" data-t="descuento" class="${st.tipo === 'descuento' ? 'active' : ''}">Descuento / condonación</button></div>
+      <p class="dim small">${st.tipo === 'exencion' ? 'El socio no paga la cuota de ese mes (ej. licencia médica, cesantía, acuerdo de asamblea).' : st.tipo === 'cargo' ? 'Suma un monto a la deuda de este socio (ej. multa, reposición de credencial).' : 'Resta un monto de la deuda de este socio (ej. condonación parcial acordada en asamblea).'}</p>
+      <div class="grid2">
+        <label class="f">${st.tipo === 'exencion' ? 'Mes exento' : 'Mes'}<input id="aMes" type="month" value="${curYm()}"></label>
+        ${st.tipo !== 'exencion' ? `<label class="f">Monto ($)<input id="aMonto" inputmode="numeric"></label>` : '<div></div>'}
+        <label class="f span2">${st.tipo === 'exencion' ? 'Motivo' : 'Concepto'}<input id="aCon" placeholder="${st.tipo === 'exencion' ? 'Ej: Licencia médica' : st.tipo === 'cargo' ? 'Ej: Reposición de credencial' : 'Ej: Condonación acuerdo asamblea'}"></label>
+      </div>`,
+    foot: ()=> `<button class="btn" data-act="close-modal">Cancelar</button><button class="btn primary" id="aOk">Guardar</button>`,
+    onMount: (el)=>{
+      $('#aTipo', el).onclick = e=>{ const b = e.target.closest('button[data-t]'); if(b){ st.tipo = b.dataset.t; drawModal(m); } };
+      $('#aOk', el).onclick = ()=>{
+        const mes = $('#aMes', el).value;
+        const monto = st.tipo === 'exencion' ? 0 : parseMonto($('#aMonto', el).value);
+        const concepto = $('#aCon', el).value.trim();
+        if(!mes){ toast('Indica el mes.', 'bad'); return; }
+        if(st.tipo !== 'exencion' && monto <= 0){ toast('Indica el monto.', 'bad'); return; }
+        if(st.tipo === 'exencion' && live('ajustes').some(a=> a.socioId === sid && a.tipo === 'exencion' && a.mes === mes)){ toast('Ese mes ya está exento.', 'bad'); return; }
+        closeModal();
+        upsert('ajustes', { id: uid(), socioId: sid, tipo: st.tipo, mes, monto, concepto, por: yo() });
+        refreshOpenModal();
+        toast('✓ Ajuste guardado', 'ok');
+      };
+    },
+  });
+};
+
+/* =====================================================================
+   TARJETA QR + PIN DEL SOCIO
+   ===================================================================== */
+function qrSvg(text){ const q = qrcode(0, 'M'); q.addData(text, 'Byte'); q.make(); return q.createSvgTag({ cellSize: 4, margin: 2, scalable: true }); }
+ACT['tarjeta'] = el=>{
+  const id = el.dataset.id;
+  ensureCredenciales();
+  openModal({
+    live: true,
+    title: ()=> 'Tarjeta y PIN',
+    body: ()=>{
+      const s = getById('socios', id);
+      const url = socioPortalUrl(s);
+      const ready = connected() && portalBaseUrl();
+      return `<div style="display:flex;gap:18px;flex-wrap:wrap;align-items:center">
+        <div class="qrbox">${ready ? qrSvg(url) : '<div class="empty" style="color:#555">Conecta el repositorio en Ajustes para generar el QR del portal.</div>'}</div>
+        <div style="flex:1;min-width:200px">
+          <div style="font-weight:800;font-size:1.1rem">${esc(s.nombre)}</div>
+          <div class="dim small" style="margin:4px 0 10px">El socio escanea el QR con la cámara de su celular y escribe su PIN para ver su estado de cuenta.</div>
+          <div class="dim small">PIN</div><div class="pin">${esc(s.pin)}</div>
+        </div></div>
+      ${ready ? `<label class="f" style="margin-top:12px">Enlace personal (equivale al QR)<div class="copy-box">${esc(url)}</div></label>` : ''}
+      <div class="note small">Entrega el PIN por separado de la tarjeta (por ejemplo, en un papel aparte o en persona). Si alguien pierde la tarjeta, regenera la tarjeta; si alguien más conoce su PIN, cambia el PIN. En ambos casos publica el portal de nuevo.</div>
+      <div class="btn-row" style="margin-top:10px">
+        ${ready ? `<button class="btn primary" id="tPrint">🖨️ Imprimir tarjeta</button><button class="btn" id="tCopy">📋 Copiar enlace</button>` : `<button class="btn primary" data-act="go-ajustes-close">Ir a Ajustes</button>`}
+        <button class="btn" id="tPin">🔢 Cambiar PIN</button>
+        <button class="btn danger" id="tTok">♻️ Regenerar tarjeta</button>
+      </div>`;
+    },
+    onMount: (el)=>{
+      const s = getById('socios', id);
+      const p = $('#tPrint', el); if(p) p.onclick = ()=> printTarjetas([s], true);
+      const c = $('#tCopy', el); if(c) c.onclick = ()=>{ navigator.clipboard.writeText(socioPortalUrl(s)).then(()=> toast('Enlace copiado')); };
+      $('#tPin', el).onclick = async ()=>{ if(!await confirmar('¿Generar un PIN nuevo? El PIN anterior dejará de funcionar cuando publiques el portal.', 'Cambiar PIN')) return; const x = Object.assign({}, getById('socios', id), { pin: randomPin() }); upsert('socios', x); refreshOpenModal(); };
+      $('#tTok', el).onclick = async ()=>{ if(!await confirmar('¿Regenerar la tarjeta? El QR impreso anterior dejará de funcionar y habrá que imprimir una nueva.', 'Regenerar', true)) return; const x = Object.assign({}, getById('socios', id), { token: randomToken(16), pin: randomPin() }); upsert('socios', x); refreshOpenModal(); };
+    },
+  });
+};
+ACT['go-ajustes-close'] = ()=>{ while(modalStack.length) closeModal(); goTab('ajustes'); };
+
+/* =====================================================================
+   VISTA: PAGOS
+   ===================================================================== */
+VIEWS.pagos = function(){
+  const all = live('pagos').slice().sort((a, b)=> (b.fecha || '').localeCompare(a.fecha || '') || b.u - a.u);
+  const mesesSet = new Set(all.map(p=> (p.fecha || '').slice(0, 7)).filter(Boolean)); mesesSet.add(curYm());
+  const meses = Array.from(mesesSet).sort().reverse();
+  const q = normTxt(ui.pagosBusca);
+  const list = all.filter(p=>{
+    if(ui.pagosMes !== 'todos' && (p.fecha || '').slice(0, 7) !== ui.pagosMes) return false;
+    if(q){ const s = getById('socios', p.socioId); if(!s || !normTxt(s.nombre + ' ' + (s.rut || '')).includes(q)) return false; }
+    return true;
+  });
+  const total = list.reduce((a, p)=> a + (Number(p.monto) || 0), 0);
+  const porMedio = {};
+  list.forEach(p=> porMedio[p.medio || 'Otro'] = (porMedio[p.medio || 'Otro'] || 0) + (Number(p.monto) || 0));
+  return `
+  <div class="quick">
+    <button class="btn primary" data-act="nuevo-pago">💵 Registrar pago</button>
+    <button class="btn" data-act="pago-masivo">🗂️ Pago masivo del mes</button>
+    <button class="btn" data-act="excel">📊 Exportar a Excel</button>
+  </div>
+  <div class="card">
+    <div class="card-head"><h2>Pagos registrados</h2></div>
+    <div class="toolbar">
+      <select id="gMes"><option value="todos">Todos los meses</option>${meses.map(m=> `<option value="${m}" ${ui.pagosMes === m ? 'selected' : ''}>${esc(mesLabelCap(m))}</option>`).join('')}</select>
+      <input type="search" id="gBusca" placeholder="Filtrar por socio…" value="${esc(ui.pagosBusca)}">
+    </div>
+    <div class="note"><b>${list.length}</b> pago(s) · Total <b>${clp(total)}</b>${Object.keys(porMedio).length > 1 ? ' · ' + Object.entries(porMedio).map(([k, v])=> esc(k) + ': ' + clp(v)).join(' · ') : ''}</div>
+    ${list.length ? `<div class="table-wrap"><table class="t"><thead><tr><th>Fecha</th><th>Socio</th><th class="r">Monto</th><th>Medio</th><th>Registró</th><th></th></tr></thead><tbody>
+      ${list.slice(0, 400).map(p=>{ const s = getById('socios', p.socioId); return `<tr>
+        <td style="white-space:nowrap">${fdate(p.fecha)}</td>
+        <td>${s ? `<a href="#" data-act="ficha" data-id="${s.id}">${esc(s.nombre)}</a>` : '<span class="dim">(eliminado)</span>'}${p.obs ? `<div class="tiny dim">${esc(p.obs)}</div>` : ''}</td>
+        <td class="r"><b>${clp(p.monto)}</b></td><td class="small">${esc(p.medio || '')}</td><td class="small dim">${esc(p.por || '')}</td>
+        <td class="r"><button class="btn ghost sm" data-act="editar-pago" data-id="${p.id}" title="Editar">✏️</button></td></tr>`; }).join('')}
+    </tbody></table></div>${list.length > 400 ? '<div class="dim small" style="margin-top:6px">Se muestran los 400 más recientes. Usa el filtro por mes o exporta a Excel.</div>' : ''}` : `<div class="empty">No hay pagos con ese filtro.</div>`}
+  </div>`;
+};
+VIEWS.pagos.mount = function(v){
+  $('#gMes', v).onchange = e=>{ ui.pagosMes = e.target.value; renderView(); };
+  const b = $('#gBusca', v);
+  b.addEventListener('input', ()=>{ ui.pagosBusca = b.value; const pos = b.selectionStart; renderView(); const n = $('#gBusca'); n.focus(); try{ n.setSelectionRange(pos, pos); }catch(e){} });
+};
+
+/* =====================================================================
+   VISTA: CUOTAS (valor, vencimiento, cobros extraordinarios, recaudación)
+   ===================================================================== */
+VIEWS.cuotas = function(){
+  const tarifas = live('tarifas').sort((a, b)=> ymToIdx(b.desde) - ymToIdx(a.desde));
+  const cobros = live('cobros').sort((a, b)=> ymToIdx(b.mes) - ymToIdx(a.mes));
+  // recaudación de los últimos 12 meses
+  const cur = ymToIdx(curYm());
+  const socios = live('socios');
+  const filas = [];
+  for(let i = cur; i > cur - 12; i--){
+    const ym = idxToYm(i);
+    let esperado = 0, cubierto = 0;
+    socios.forEach(s=>{ cuentaSocio(s, cur).items.filter(it=> it.mes === ym && it.monto > 0).forEach(it=>{ esperado += it.monto; cubierto += it.pagado || 0; }); });
+    const recaudado = live('pagos').filter(p=> (p.fecha || '').slice(0, 7) === ym).reduce((a, p)=> a + (Number(p.monto) || 0), 0);
+    filas.push({ ym, esperado, cubierto, recaudado });
+  }
+  return `
+  <div class="card">
+    <h2>Valor de la cuota mensual</h2>
+    <p class="dim small">Si la cuota cambia, agrega el nuevo valor indicando desde qué mes rige. Los meses anteriores conservan su valor.</p>
+    ${tarifas.length ? tarifas.map((t, i)=> `<div class="row"><div class="main"><div class="title">${clp(t.monto)}</div><div class="sub">Desde ${esc(mesLabel(t.desde))}${i === 0 ? ' · vigente' : ''}</div></div><button class="btn ghost sm" data-act="borrar-tarifa" data-id="${t.id}" title="Quitar">🗑️</button></div>`).join('') : '<div class="empty">Aún no hay valor de cuota.</div>'}
+    <div class="grid3" style="margin-top:10px">
+      <label class="f">Nuevo valor ($)<input id="tMonto" inputmode="numeric" placeholder="Ej: 6.000"></label>
+      <label class="f">Rige desde<input id="tDesde" type="month" value="${idxToYm(cur + 1)}"></label>
+      <div style="display:flex;align-items:flex-end"><button class="btn primary" data-act="nueva-tarifa" style="width:100%">Agregar valor</button></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Vencimiento y socios nuevos</h2>
+    <div class="grid2">
+      <label class="f">Día de vencimiento de cada mes<input id="cDia" type="number" min="1" max="28" value="${diaVenc()}"></label>
+      <label class="f">Mes de inicio por defecto para socios nuevos<input id="cIni" type="month" value="${esc(S.config.mesInicioDefault || curYm())}"></label>
+    </div>
+    <p class="dim small">Antes del día de vencimiento, la cuota del mes en curso aparece como "por vencer" y no cuenta como deuda.</p>
+    <button class="btn" data-act="guardar-venc">Guardar</button>
+  </div>
+  <div class="card">
+    <div class="card-head"><h2>Cobros extraordinarios</h2><button class="btn primary sm" data-act="nuevo-cobro">+ Nuevo cobro</button></div>
+    <p class="dim small">Ej: aporte para un evento, cuota extraordinaria acordada en asamblea. Se suma a la deuda de los socios indicados.</p>
+    ${cobros.length ? cobros.map(c=>{
+      const n = c.socios === 'todos' ? live('socios').filter(s=> { const i = ymToIdx(c.mes); return ymToIdx(socioInicio(s)) <= i && (!s.mesTermino || ymToIdx(s.mesTermino) >= i); }).length : (c.socios || []).length;
+      let pagados = 0; live('socios').forEach(s=>{ const it = cuentaSocio(s, ymToIdx(c.mes)).items.find(x=> x.ref === c.id); if(it && it.estado === 'pagado') pagados++; });
+      return `<div class="row"><div class="main"><div class="title">${esc(c.concepto)} · ${clp(c.monto)}</div><div class="sub">${esc(mesLabelCap(c.mes))} · ${c.socios === 'todos' ? 'todos los socios' : 'socios seleccionados'} (${n}) · pagado por ${pagados}</div></div><button class="btn ghost sm" data-act="editar-cobro" data-id="${c.id}">✏️</button></div>`;
+    }).join('') : '<div class="empty">Sin cobros extraordinarios.</div>'}
+  </div>
+  <div class="card">
+    <h2>Recaudación de los últimos 12 meses</h2>
+    <div class="table-wrap"><table class="t"><thead><tr><th>Mes</th><th class="r">Cobrado (cuotas y cobros)</th><th class="r">Pagado de ese mes</th><th class="r">%</th><th class="r">Dinero recibido en el mes</th></tr></thead><tbody>
+      ${filas.map(f=> `<tr><td>${esc(mesLabelCap(f.ym))}</td><td class="r">${clp(f.esperado)}</td><td class="r">${clp(f.cubierto)}</td><td class="r">${f.esperado ? Math.round(f.cubierto / f.esperado * 100) + '%' : '—'}</td><td class="r"><b>${clp(f.recaudado)}</b></td></tr>`).join('')}
+    </tbody></table></div>
+    <p class="dim tiny">"Pagado de ese mes" considera los pagos imputados a las cuotas de ese mes (aunque se hayan pagado después). "Dinero recibido" es lo que efectivamente entró en ese mes.</p>
+  </div>`;
+};
+ACT['nueva-tarifa'] = ()=>{
+  const monto = parseMonto($('#tMonto').value), desde = $('#tDesde').value;
+  if(monto <= 0 || !desde){ toast('Indica el valor y el mes desde el que rige.', 'bad'); return; }
+  const ex = live('tarifas').find(t=> t.desde === desde);
+  if(ex){ ex.monto = monto; upsert('tarifas', ex); } else upsert('tarifas', { id: uid(), desde, monto });
+  toast('✓ Valor de cuota guardado', 'ok');
+};
+ACT['borrar-tarifa'] = async el=>{
+  if(live('tarifas').length === 1){ toast('Debe quedar al menos un valor de cuota.', 'bad'); return; }
+  if(!await confirmar('¿Quitar este valor de cuota? La deuda de todos los socios se recalculará con los valores restantes.', 'Quitar', true)) return;
+  removeRec('tarifas', el.dataset.id);
+};
+ACT['guardar-venc'] = ()=>{
+  const d = Math.min(28, Math.max(1, parseInt($('#cDia').value, 10) || 10));
+  setConfig({ diaVencimiento: d, mesInicioDefault: $('#cIni').value || curYm() });
+  toast('✓ Guardado', 'ok');
+};
+function openCobro(id){
+  const c = id ? Object.assign({}, getById('cobros', id)) : { id: uid(), concepto: '', monto: 0, mes: curYm(), socios: 'todos' };
+  const st = { todos: c.socios === 'todos', sel: new Set(Array.isArray(c.socios) ? c.socios : []), busca: '' };
+  const m = openModal({
+    title: ()=> id ? 'Editar cobro extraordinario' : 'Nuevo cobro extraordinario',
+    body: ()=> `<div class="grid3">
+        <label class="f span2" style="grid-column:span 2">Concepto<input id="kCon" value="${esc(c.concepto)}" placeholder="Ej: Aporte aniversario"></label>
+        <label class="f">Monto por socio ($)<input id="kMonto" inputmode="numeric" value="${c.monto ? miles(c.monto) : ''}"></label>
+        <label class="f">Mes del cobro<input id="kMes" type="month" value="${esc(c.mes)}"></label>
+      </div>
+      <div class="seg" id="kA" style="margin-top:12px"><button type="button" data-v="1" class="${st.todos ? 'active' : ''}">Todos los socios activos</button><button type="button" data-v="0" class="${!st.todos ? 'active' : ''}">Elegir socios</button></div>
+      ${st.todos ? '' : `<div style="margin-top:10px">${sociosOrdenados().filter(socioActivo).map(s=> `<label class="check" style="padding:5px 0"><input type="checkbox" class="kChk" value="${s.id}" ${st.sel.has(s.id) ? 'checked' : ''}> ${esc(s.nombre)}</label>`).join('')}</div>`}`,
+    foot: ()=> `${id ? '<button class="btn danger" id="kDel">Eliminar</button><span style="flex:1"></span>' : ''}<button class="btn" data-act="close-modal">Cancelar</button><button class="btn primary" id="kOk">Guardar</button>`,
+    onMount: (el)=>{
+      const keep = ()=>{ c.concepto = $('#kCon', el).value; c.monto = parseMonto($('#kMonto', el).value); c.mes = $('#kMes', el).value; $$('.kChk', el).forEach(x=> x.checked ? st.sel.add(x.value) : st.sel.delete(x.value)); };
+      $('#kA', el).onclick = e=>{ const b = e.target.closest('button[data-v]'); if(b){ keep(); st.todos = b.dataset.v === '1'; drawModal(m); } };
+      $('#kOk', el).onclick = ()=>{
+        keep();
+        if(!c.concepto.trim() || c.monto <= 0 || !c.mes){ toast('Completa concepto, monto y mes.', 'bad'); return; }
+        if(!st.todos && !st.sel.size){ toast('Elige al menos un socio.', 'bad'); return; }
+        c.concepto = c.concepto.trim();
+        c.socios = st.todos ? 'todos' : Array.from(st.sel);
+        closeModal(); upsert('cobros', c); toast('✓ Cobro guardado', 'ok');
+      };
+      const d = $('#kDel', el);
+      if(d) d.onclick = async ()=>{ if(!await confirmar('¿Eliminar este cobro? Se quitará de la deuda de todos los socios (los pagos ya hechos quedarán como abono a otras cuotas).', 'Eliminar', true)) return; closeModal(); removeRec('cobros', id); };
+    },
+  });
+}
+ACT['nuevo-cobro'] = ()=> openCobro(null);
+ACT['editar-cobro'] = el=> openCobro(el.dataset.id);
+
+/* =====================================================================
+   VISTA: PORTAL DE SOCIOS
+   ===================================================================== */
+VIEWS.portal = function(){
+  const ok = connected();
+  const at = Number(lsGet('cs_portal_at', '0'));
+  const n = live('socios').length;
+  return `
+  <div class="card">
+    <h2>Portal de socios</h2>
+    <p class="dim">Cada socio recibe una <b>tarjeta con código QR</b> y un <b>PIN de 4 dígitos</b>. Al escanear el QR con su celular se abre el portal; con el PIN ve su deuda, los meses pagados y sus pagos. Los datos se publican cifrados: sin la tarjeta <b>y</b> el PIN no se pueden leer.</p>
+    ${ok ? `
+      <dl class="kv" style="margin:12px 0">
+        <dt>Dirección del portal</dt><dd><a href="${esc(portalBaseUrl())}" target="_blank" rel="noopener">${esc(portalBaseUrl())}</a></dd>
+        <dt>Última publicación</dt><dd>${at ? fdatetime(at) : 'Nunca'}</dd>
+        <dt>Socios</dt><dd>${n}</dd>
+      </dl>
+      <label class="check" style="margin:8px 0 12px"><input type="checkbox" id="pAuto" ${S.config.portalAuto ? 'checked' : ''}> Publicar automáticamente después de cada cambio</label>
+      <div class="btn-row"><button class="btn primary" data-act="publicar">🚀 Publicar ahora</button></div>
+      <div id="pubProg" class="dim small" style="margin-top:8px"></div>
+    ` : `<div class="note warn">Para publicar el portal, primero conecta el repositorio de GitHub en <a href="#" data-act="go" data-tab="ajustes">Ajustes</a>.</div>`}
+  </div>
+  <div class="card">
+    <h2>Tarjetas e impresión</h2>
+    <p class="dim small">Imprime en tamaño carta. Las tarjetas (con QR) y la hoja de PINs se imprimen por separado para entregarlos por vías distintas.</p>
+    <div class="btn-row">
+      <button class="btn" data-act="print-tarjetas" ${ok ? '' : 'disabled'}>🪪 Imprimir tarjetas (${live('socios').filter(socioActivo).length})</button>
+      <button class="btn" data-act="print-pins">🔢 Imprimir hoja de PINs</button>
+      <button class="btn" data-act="print-estados">🖨️ Estados de cuenta de todos</button>
+    </div>
+    <p class="dim tiny" style="margin-top:10px">Para una sola tarjeta, abre al socio y toca "Tarjeta y PIN".</p>
+  </div>
+  <div class="card">
+    <h2>¿Qué ve el socio?</h2>
+    <ul class="steps dim small">
+      <li>Su deuda vencida y los meses que adeuda.</li>
+      <li>Una grilla por año con los meses pagados, pendientes y por vencer.</li>
+      <li>Sus pagos (fecha, monto y medio de pago) y cobros extraordinarios.</li>
+      <li>No ve notas internas, observaciones de pagos ni datos de otros socios.</li>
+    </ul>
+  </div>`;
+};
+VIEWS.portal.mount = function(v){
+  const a = $('#pAuto', v);
+  if(a) a.onchange = ()=>{ setConfig({ portalAuto: a.checked }, { noRender: true }); if(a.checked) schedulePortal(); };
+};
+ACT['publicar'] = async el=>{
+  el.disabled = true;
+  const prog = $('#pubProg');
+  try{
+    await syncNow({ silent: true });
+    await publishPortal(true, (i, n)=>{ if(prog) prog.textContent = `Cifrando estados de cuenta… ${i} de ${n}`; });
+  }catch(e){ toast('⚠ ' + (e.message || e), 'bad'); }
+  finally{ el.disabled = false; if(prog) prog.textContent = ''; }
+};
+
+/* =====================================================================
+   IMPRESIÓN
+   ===================================================================== */
+function printHtml(html){
+  $('#printArea').innerHTML = html;
+  setTimeout(()=>{ window.print(); }, 60);
+}
+function printTarjetas(socios, uno){
+  ensureCredenciales();
+  const sind = S.config.nombre || 'Sindicato';
+  printHtml(`<div class="p-cards">${socios.map(s=> `<div class="p-card"><div class="q">${qrSvg(socioPortalUrl(s))}</div><div><div class="s">${esc(sind)}</div><div class="n">${esc(s.nombre)}</div>${s.rut ? `<div class="s">${esc(formatRut(s.rut))}</div>` : ''}<div class="s">Escanea el código con la cámara de tu celular e ingresa tu PIN para ver tus cuotas pagadas y tu deuda.</div></div></div>`).join('')}</div>${uno ? `<p style="margin-top:8mm;font-size:10pt">PIN de ${esc(socios[0].nombre)}: <b style="font-size:14pt;letter-spacing:2pt">${esc(socios[0].pin)}</b> (recortar y entregar por separado)</p>` : ''}`);
+}
+ACT['print-tarjetas'] = ()=> printTarjetas(sociosOrdenados().filter(socioActivo));
+ACT['print-pins'] = ()=>{
+  ensureCredenciales();
+  const sind = S.config.nombre || 'Sindicato';
+  printHtml(`<h1 class="p">${esc(sind)} · PIN del portal de socios</h1><p style="font-size:9pt;margin:0 0 4mm">Recortar y entregar a cada socio junto con su tarjeta (por separado). No compartir el PIN.</p><div class="p-pins">${sociosOrdenados().filter(socioActivo).map(s=> `<div class="p-pin">${esc(s.nombre)}<b>${esc(s.pin)}</b></div>`).join('')}</div>`);
+};
+function estadoCuentaHtml(s){
+  const c = cuentaSocio(s);
+  const y = new Date().getFullYear();
+  const meses = estadoMeses(s, y);
+  const pend = c.items.filter(it=> it.vencido && it.monto > 0 && it.estado !== 'pagado');
+  const pagos = c.pagos.slice().sort((a, b)=> (b.fecha || '').localeCompare(a.fecha || '')).slice(0, 24);
+  return `<h1 class="p">${esc(S.config.nombre || 'Sindicato')}</h1>
+  <div><b>Estado de cuenta de cuotas sindicales</b> · emitido el ${fdate(todayISO())}</div>
+  <table class="p"><tr><th>Socio/a</th><td>${esc(s.nombre)}</td><th>RUT</th><td>${esc(s.rut ? formatRut(s.rut) : '—')}</td></tr>
+  <tr><th>Socio/a desde</th><td>${esc(mesLabelCap(socioInicio(s)))}</td><th>Cuota mensual vigente</th><td>${clp(tarifaActual())}</td></tr>
+  <tr><th>Deuda vencida</th><td><b>${clp(c.deuda)}</b></td><th>Meses adeudados</th><td>${c.mesesAdeudados.length ? esc(c.mesesAdeudados.map(m=> mesLabel(m, true)).join(', ')) : 'Ninguno'}</td></tr>
+  ${c.saldoFavor ? `<tr><th>Saldo a favor</th><td colspan="3">${clp(c.saldoFavor)}</td></tr>` : ''}</table>
+  <h2 class="p">Cuotas ${y}</h2>
+  <table class="p"><tr>${meses.map(m=> `<th>${MESES_C[Number(m.ym.slice(5)) - 1]}</th>`).join('')}</tr><tr>${meses.map(m=> `<td style="font-size:8.5pt">${esc(m.txt)}</td>`).join('')}</tr></table>
+  ${pend.length ? `<h2 class="p">Detalle de lo adeudado</h2><table class="p"><tr><th>Concepto</th><th class="r">Monto</th><th class="r">Abonado</th><th class="r">Saldo</th></tr>${pend.map(it=> `<tr><td>${esc(it.concepto)}</td><td class="r">${clp(it.monto)}</td><td class="r">${it.pagado ? clp(it.pagado) : '—'}</td><td class="r">${clp(it.monto - it.pagado)}</td></tr>`).join('')}<tr><th colspan="3">Total</th><th class="r">${clp(c.deuda)}</th></tr></table>` : ''}
+  <h2 class="p">Últimos pagos</h2>
+  ${pagos.length ? `<table class="p"><tr><th>Fecha</th><th class="r">Monto</th><th>Medio</th></tr>${pagos.map(p=> `<tr><td>${fdate(p.fecha)}</td><td class="r">${clp(p.monto)}</td><td>${esc(p.medio || '')}</td></tr>`).join('')}</table>` : '<p>Sin pagos registrados.</p>'}
+  <p style="font-size:9pt;margin-top:6mm">Los pagos se imputan a la deuda más antigua. Ante cualquier diferencia, consulte con la directiva.</p>`;
+}
+ACT['print-estado'] = el=>{ const s = getById('socios', el.dataset.id); if(s) printHtml(estadoCuentaHtml(s)); };
+ACT['print-estados'] = ()=> printHtml(sociosOrdenados().filter(socioActivo).map(s=> estadoCuentaHtml(s)).join('<div class="p-break"></div>'));
+
+/* =====================================================================
+   EXCEL
+   ===================================================================== */
+function loadXLSX(){
+  if(window.XLSX) return Promise.resolve(window.XLSX);
+  return new Promise((res, rej)=>{
+    const sc = document.createElement('script');
+    sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    sc.onload = ()=> res(window.XLSX); sc.onerror = ()=> rej(new Error('No se pudo cargar el generador de Excel (¿sin internet?).'));
+    document.head.appendChild(sc);
+  });
+}
+ACT['excel'] = async ()=>{
+  try{
+    const XLSX = await loadXLSX();
+    const wb = XLSX.utils.book_new();
+    const socios = sociosOrdenados();
+    const res = socios.map(s=>{ const c = cuentaSocio(s); return { 'Nombre': s.nombre, 'RUT': s.rut ? formatRut(s.rut) : '', 'Socio desde': mesLabelCap(socioInicio(s)), 'Retiro': s.mesTermino ? mesLabelCap(s.mesTermino) : '', 'Estado': c.deuda > 0 ? 'Con deuda' : 'Al día', 'N° meses adeudados': c.mesesAdeudados.length, 'Meses adeudados': c.mesesAdeudados.map(m=> mesLabel(m, true)).join(', '), 'Deuda vencida': c.deuda, 'Saldo a favor': c.saldoFavor, 'Total pagado': c.totalPagos, 'Último pago': c.ultimoPago ? fdate(c.ultimoPago.fecha) : '', 'Teléfono': s.telefono || '', 'Correo': s.email || '' }; });
+    const ws1 = XLSX.utils.json_to_sheet(res);
+    ws1['!cols'] = [{ wch: 32 }, { wch: 13 }, { wch: 16 }, { wch: 14 }, { wch: 11 }, { wch: 10 }, { wch: 40 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 26 }];
+    XLSX.utils.book_append_sheet(wb, ws1, 'Resumen socios');
+    const pagos = live('pagos').slice().sort((a, b)=> (a.fecha || '').localeCompare(b.fecha || '')).map(p=>{ const s = getById('socios', p.socioId); return { 'Fecha': fdate(p.fecha), 'Socio': s ? s.nombre : '(eliminado)', 'RUT': s && s.rut ? formatRut(s.rut) : '', 'Monto': Number(p.monto) || 0, 'Medio': p.medio || '', 'Observación': p.obs || '', 'Registró': p.por || '' }; });
+    const ws2 = XLSX.utils.json_to_sheet(pagos.length ? pagos : [{ 'Fecha': '', 'Socio': '', 'Monto': '' }]);
+    ws2['!cols'] = [{ wch: 11 }, { wch: 32 }, { wch: 13 }, { wch: 10 }, { wch: 22 }, { wch: 30 }, { wch: 16 }];
+    XLSX.utils.book_append_sheet(wb, ws2, 'Pagos');
+    const y = new Date().getFullYear();
+    [y, y - 1].forEach(yr=>{
+      const rows = socios.filter(s=> ymToIdx(socioInicio(s)) <= ymToIdx(yr + '-12')).map(s=>{ const r = { 'Nombre': s.nombre }; estadoMeses(s, yr).forEach(m=> r[MESES_C[Number(m.ym.slice(5)) - 1]] = m.txt); r['Deuda vencida total'] = cuentaSocio(s).deuda; return r; });
+      if(rows.length){ const ws = XLSX.utils.json_to_sheet(rows); ws['!cols'] = [{ wch: 32 }].concat(Array(12).fill({ wch: 13 })).concat([{ wch: 14 }]); XLSX.utils.book_append_sheet(wb, ws, 'Cuotas ' + yr); }
+    });
+    const cob = live('cobros').map(c=> ({ 'Mes': mesLabelCap(c.mes), 'Concepto': c.concepto, 'Monto por socio': Number(c.monto) || 0, 'Aplica a': c.socios === 'todos' ? 'Todos' : (c.socios || []).map(id=> (getById('socios', id) || {}).nombre).filter(Boolean).join(', ') }));
+    if(cob.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cob), 'Cobros extraordinarios');
+    XLSX.writeFile(wb, `cuotas-${normTxt(S.config.nombre || 'sindicato').replace(/[^a-z0-9]+/g, '-').slice(0, 30)}-${todayISO()}.xlsx`);
+  }catch(e){ toast('⚠ ' + (e.message || e), 'bad'); }
+};
+
+/* =====================================================================
+   VISTA: AJUSTES (datos, conexión entre dirigentes, apariencia, respaldo)
+   ===================================================================== */
+VIEWS.ajustes = function(){
+  const c = conn();
+  const pal = lsGet('cs_paleta', 'bosque'), tema = lsGet('cs_tema', 'claro');
+  return `
+  <div class="card">
+    <h2>Datos generales</h2>
+    <div class="grid2">
+      <label class="f">Nombre del sindicato<input id="aNom" value="${esc(S.config.nombre)}"></label>
+      <label class="f">Tu nombre (aparece en los pagos que registras)<input id="aYo" value="${esc(lsGet('cs_yo', ''))}" placeholder="Ej: Tesorera María"></label>
+    </div>
+    <div style="margin-top:10px"><button class="btn" data-act="guardar-generales">Guardar</button></div>
+  </div>
+  <div class="card">
+    <h2>Compartir con otros dirigentes</h2>
+    ${connected() ? `
+      <div class="note ok">✓ Conectado al repositorio <b>${esc(c.owner)}/${esc(c.repo)}</b>${c.folder ? ' (carpeta ' + esc(c.folder) + ')' : ''}. Los datos se guardan cifrados con la clave compartida.</div>
+      <dl class="kv"><dt>Estado</dt><dd>${esc(syncState.st === 'error' ? '⚠ ' + syncState.msg : syncState.at ? 'Sincronizado el ' + fdatetime(syncState.at) : 'Pendiente')}</dd><dt>Código de datos</dt><dd>${esc(c.fileId)}</dd></dl>
+      <div class="btn-row" style="margin-top:12px">
+        <button class="btn primary" data-act="sync-now">⟳ Sincronizar ahora</button>
+        <button class="btn" data-act="invitar">✉️ Invitar a otro dirigente</button>
+        <button class="btn danger" data-act="desconectar">Desconectar este equipo</button>
+      </div>` : `
+      <p class="dim small">Por ahora los datos están <b>solo en este equipo</b>. Para que varios dirigentes registren pagos y se publique el portal de socios, conecta un repositorio de GitHub (gratis). Uno de ustedes lo configura una vez y luego invita a los demás con un enlace.</p>
+      <div class="btn-row"><button class="btn primary" data-act="conectar">🔗 Configurar repositorio</button><button class="btn" data-act="unirse">✉️ Tengo un enlace de invitación</button></div>
+      <details class="adv" style="margin-top:12px"><summary>¿Cómo preparar el repositorio?</summary>
+        <ol class="steps small">
+          <li>Crea una cuenta en <b>github.com</b> (si no tienes) y un repositorio <b>público</b> nuevo, por ejemplo <i>cuotas-sindicato</i>.</li>
+          <li>Sube a ese repositorio los archivos de la app: <b>cuotas.html</b>, <b>portal.html</b>, <b>manifest.json</b>, <b>sw.js</b> e íconos.</li>
+          <li>En el repositorio: <b>Settings → Pages</b>, elige la rama <i>main</i> y guarda. Tu app quedará en <i>https://usuario.github.io/cuotas-sindicato/cuotas.html</i>.</li>
+          <li>En tu perfil: <b>Settings → Developer settings → Personal access tokens → Fine-grained tokens</b>. Crea una llave solo para ese repositorio con permiso <b>Contents: Read and write</b>.</li>
+          <li>Aquí, toca "Configurar repositorio", pega la llave y define una <b>clave compartida</b> (una frase larga que solo conozcan los dirigentes).</li>
+        </ol>
+        <p class="dim tiny">El repositorio es público para que el portal funcione, pero los datos se suben cifrados: sin la clave compartida nadie puede leerlos.</p>
+      </details>`}
+  </div>
+  <div class="card">
+    <h2>Apariencia</h2>
+    <div class="toolbar"><div class="seg" id="aTema"><button type="button" data-v="claro" class="${tema === 'claro' ? 'active' : ''}">☀️ Claro</button><button type="button" data-v="oscuro" class="${tema === 'oscuro' ? 'active' : ''}">🌙 Oscuro</button></div></div>
+    <div class="btn-row" id="aPal">${Object.keys(window.PALETAS).map(k=> `<button type="button" class="btn sm" data-p="${k}" style="${k === pal ? 'outline:2px solid var(--primary);' : ''}"><span style="width:16px;height:16px;border-radius:50%;background:${window.PALETAS[k][1]};display:inline-block"></span>${window.PALETAS[k][0]}</button>`).join('')}</div>
+  </div>
+  <div class="card">
+    <h2>Respaldo y exportación</h2>
+    <div class="btn-row">
+      <button class="btn" data-act="excel">📊 Exportar todo a Excel</button>
+      <button class="btn" data-act="respaldo">💾 Descargar respaldo</button>
+      <label class="btn" style="cursor:pointer">📂 Combinar desde respaldo<input type="file" id="aRest" accept=".json,application/json" style="display:none"></label>
+    </div>
+    <p class="dim tiny" style="margin-top:8px">El respaldo es un archivo sin cifrar con todos los datos: guárdalo en un lugar seguro. "Combinar" agrega lo del archivo sin borrar lo que ya tienes.</p>
+  </div>
+  <div class="card">
+    <h2>Zona de cuidado</h2>
+    <button class="btn danger" data-act="borrar-local">Borrar los datos de este equipo</button>
+    <p class="dim tiny" style="margin-top:8px">Solo borra la copia de este dispositivo (útil si lo vas a entregar). Si estás conectado, los datos siguen en el repositorio para los demás dirigentes.</p>
+  </div>`;
+};
+VIEWS.ajustes.mount = function(v){
+  $('#aTema', v).onclick = e=>{ const b = e.target.closest('button[data-v]'); if(!b) return; lsSet('cs_tema', b.dataset.v); window.aplicarTema(); renderView(); };
+  $('#aPal', v).onclick = e=>{ const b = e.target.closest('button[data-p]'); if(!b) return; lsSet('cs_paleta', b.dataset.p); window.aplicarTema(); renderView(); };
+  $('#aRest', v).onchange = async e=>{
+    const f = e.target.files[0]; if(!f) return;
+    try{
+      const data = JSON.parse(await f.text());
+      const st = data.app === 'cuotas-sindicales-respaldo' ? data.datos : data;
+      if(!st || !Array.isArray(st.socios)) throw new Error('El archivo no es un respaldo de esta app.');
+      if(!await confirmar(`El respaldo tiene ${st.socios.filter(x=> !x.del).length} socios y ${(st.pagos || []).filter(x=> !x.del).length} pagos. ¿Combinarlo con los datos actuales?`, 'Combinar')) return;
+      S = mergeStates(S, st);
+      changed();
+      toast('✓ Respaldo combinado', 'ok');
+    }catch(err){ toast('⚠ ' + err.message, 'bad'); }
+    e.target.value = '';
+  };
+};
+ACT['guardar-generales'] = ()=>{
+  lsSet('cs_yo', $('#aYo').value.trim());
+  setConfig({ nombre: $('#aNom').value.trim() });
+  toast('✓ Guardado', 'ok');
+};
+ACT['respaldo'] = ()=>{
+  const blob = new Blob([JSON.stringify({ app: 'cuotas-sindicales-respaldo', generado: new Date().toISOString(), datos: S }, null, 1)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `respaldo-cuotas-${todayISO()}.json`;
+  a.click();
+  setTimeout(()=> URL.revokeObjectURL(a.href), 2000);
+};
+ACT['borrar-local'] = async ()=>{
+  if(!await confirmar('¿Borrar todos los datos de este dispositivo? ' + (connected() ? 'Seguirán disponibles en el repositorio para los otros dirigentes.' : '<b>No estás conectado: si no tienes respaldo, se perderán.</b>'), 'Borrar', true)) return;
+  ['cs_state', 'cs_conn', 'cs_dirty', 'cs_last_sync', 'cs_portal_at'].forEach(k=> lsSet(k, null));
+  location.reload();
+};
+ACT['desconectar'] = async ()=>{
+  if(lsGet('cs_dirty', '0') === '1' && !await confirmar('Hay cambios que aún no se suben. ¿Desconectar igual? (quedarán solo en este equipo)', 'Desconectar', true)) return;
+  if(!await confirmar('¿Desconectar este equipo del repositorio? Los datos quedan en este equipo, pero dejarán de sincronizarse.', 'Desconectar', true)) return;
+  setConn(null); renderView();
+};
+
+/* ---------- Configurar repositorio ---------- */
+ACT['conectar'] = ()=>{
+  const guess = (location.hostname.match(/^([a-z0-9-]+)\.github\.io$/i) || [])[1] || '';
+  const repoGuess = guess ? (location.pathname.split('/').filter(Boolean)[0] || '') : '';
+  openModal({
+    title: ()=> 'Configurar repositorio',
+    sticky: true,
+    body: ()=> `<p class="dim small">Esto se hace <b>una sola vez</b>. Después invitas a los demás dirigentes con un enlace.</p>
+      <div class="grid2">
+        <label class="f">Usuario u organización de GitHub<input id="cOwner" value="${esc(guess)}" autocomplete="off"></label>
+        <label class="f">Repositorio<input id="cRepo" value="${esc(repoGuess.endsWith('.html') ? '' : repoGuess)}" autocomplete="off" placeholder="cuotas-sindicato"></label>
+        <label class="f span2">Llave de acceso (fine-grained token)<input id="cTok" type="password" autocomplete="off" placeholder="github_pat_…"></label>
+        <label class="f">Clave compartida de los dirigentes<input id="cK1" type="password" autocomplete="new-password" placeholder="Mínimo 10 caracteres"></label>
+        <label class="f">Repite la clave<input id="cK2" type="password" autocomplete="new-password"></label>
+      </div>
+      <details class="adv"><summary>Opciones avanzadas</summary><div class="grid2">
+        <label class="f">Carpeta dentro del repositorio<input id="cFolder" placeholder="(vacío = raíz)"></label>
+        <label class="f">Rama<input id="cBranch" placeholder="(vacío = principal)"></label>
+        <label class="f span2">Dirección del portal (si no es la predeterminada)<input id="cPortal" placeholder="https://…/portal.html"></label>
+      </div></details>
+      <div class="note warn small">Anota la clave compartida en un lugar seguro: si se pierde, los datos cifrados no se pueden recuperar (salvo desde un respaldo).</div>
+      <div id="cMsg"></div>`,
+    foot: ()=> `<button class="btn" data-act="close-modal">Cancelar</button><button class="btn primary" id="cOk">Conectar</button>`,
+    onMount: (el)=>{
+      $('#cOk', el).onclick = async ()=>{
+        const owner = $('#cOwner', el).value.trim(), repo = $('#cRepo', el).value.trim().replace(/\.git$/, ''), token = $('#cTok', el).value.trim();
+        const k1 = $('#cK1', el).value, k2 = $('#cK2', el).value;
+        if(!owner || !repo || !token){ toast('Completa usuario, repositorio y llave.', 'bad'); return; }
+        if(k1.length < 10){ toast('La clave compartida debe tener al menos 10 caracteres.', 'bad'); return; }
+        if(k1 !== k2){ toast('Las claves no coinciden.', 'bad'); return; }
+        const btn = $('#cOk', el); btn.disabled = true; btn.textContent = 'Probando…';
+        const prevConn = conn();
+        setConn({ owner, repo, token, clave: k1, fileId: randomId(10), folder: $('#cFolder', el).value.trim(), branch: $('#cBranch', el).value.trim(), portalUrl: $('#cPortal', el).value.trim() });
+        try{
+          const r = await gh(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`);
+          if(!r.res.ok) throw new Error(ghError(r.res, r.body));
+          if(r.body && r.body.permissions && !r.body.permissions.push) throw new Error('La llave no tiene permiso de escritura en ese repositorio.');
+          if(r.body && r.body.private) toast('Ojo: el repositorio es privado. GitHub Pages en repositorios privados requiere plan pagado; el portal podría no verse.', '', 10000);
+          const ok = await syncNow();
+          if(!ok) throw new Error(syncState.msg || 'No se pudo subir los datos.');
+          closeModal();
+          toast('✓ Conectado. Ahora puedes invitar a otros dirigentes.', 'ok');
+          renderView();
+        }catch(e){
+          setConn(prevConn);
+          btn.disabled = false; btn.textContent = 'Conectar';
+          $('#cMsg', el).innerHTML = `<div class="note bad">${esc(e.message || e)}</div>`;
+          updateChip();
+        }
+      };
+    },
+  });
+};
+
+/* ---------- Invitación (enlace con los datos de conexión) ---------- */
+function invitacionUrl(){
+  const c = conn();
+  const data = { o: c.owner, r: c.repo, b: c.branch || '', d: c.folder || '', f: c.fileId, t: c.token, k: c.clave, p: c.portalUrl || '', n: S.config.nombre || '' };
+  const base = /^https?:/.test(location.protocol) ? location.href.split('#')[0].split('?')[0] : 'cuotas.html';
+  return base + '#unir=' + b64url(JSON.stringify(data));
+}
+ACT['invitar'] = ()=>{
+  const url = invitacionUrl();
+  openModal({
+    title: ()=> 'Invitar a otro dirigente',
+    body: ()=> `<p class="dim small">Envía este enlace <b>de forma privada</b> (por ejemplo, por WhatsApp directo). Al abrirlo, su equipo queda conectado y verá los mismos datos.</p>
+      <div class="note bad small">El enlace contiene la llave del repositorio y la clave compartida: quien lo tenga puede ver y modificar los datos. No lo publiques en grupos.</div>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center"><div class="qrbox" style="width:220px">${qrSvg(url)}</div><div class="dim small" style="flex:1;min-width:180px">También puede escanear este código con la cámara del celular.</div></div>
+      <div class="copy-box" style="margin-top:10px">${esc(url)}</div>`,
+    foot: ()=> `<button class="btn" data-act="close-modal">Cerrar</button>${navigator.share ? '<button class="btn" id="iShare">Compartir…</button>' : ''}<button class="btn primary" id="iCopy">📋 Copiar enlace</button>`,
+    onMount: (el)=>{
+      $('#iCopy', el).onclick = ()=> navigator.clipboard.writeText(url).then(()=> toast('Enlace copiado'));
+      const sh = $('#iShare', el); if(sh) sh.onclick = ()=> navigator.share({ title: 'Cuotas sindicales', text: 'Invitación para administrar las cuotas del sindicato', url }).catch(()=>{});
+    },
+  });
+};
+function parseInvitacion(str){
+  const m = String(str || '').match(/unir=([A-Za-z0-9_-]+)/);
+  if(!m) return null;
+  try{ const d = JSON.parse(unb64url(m[1])); if(d.o && d.r && d.f && d.t && d.k) return d; }catch(e){}
+  return null;
+}
+function openUnirse(inv){
+  openModal({
+    title: ()=> 'Unirse como dirigente',
+    sticky: true,
+    body: ()=> `${inv ? `<p>Te invitaron a administrar las cuotas de <b>${esc(inv.n || 'el sindicato')}</b>.</p>` : `<label class="f">Pega aquí el enlace de invitación<textarea id="uLink" style="min-height:70px"></textarea></label>`}
+      <label class="f" style="margin-top:10px">Tu nombre (aparecerá en los pagos que registres)<input id="uYo" value="${esc(lsGet('cs_yo', ''))}" placeholder="Ej: Secretario Juan"></label>
+      ${live('socios').length ? `<div class="note warn small">Este equipo ya tiene ${live('socios').length} socios guardados. Se combinarán con los del sindicato al que te unes.</div>` : ''}
+      <div id="uMsg"></div>`,
+    foot: ()=> `<button class="btn" data-act="close-modal">Cancelar</button><button class="btn primary" id="uOk">Unirme</button>`,
+    onMount: (el)=>{
+      $('#uOk', el).onclick = async ()=>{
+        const d = inv || parseInvitacion($('#uLink', el).value);
+        if(!d){ toast('El enlace de invitación no es válido.', 'bad'); return; }
+        const nom = $('#uYo', el).value.trim();
+        if(!nom){ toast('Escribe tu nombre.', 'bad'); return; }
+        lsSet('cs_yo', nom);
+        const btn = $('#uOk', el); btn.disabled = true; btn.textContent = 'Conectando…';
+        const prevConn = conn();
+        setConn({ owner: d.o, repo: d.r, branch: d.b || '', folder: d.d || '', fileId: d.f, token: d.t, clave: d.k, portalUrl: d.p || '' });
+        const ok = await syncNow({ silent: true });
+        if(!ok){
+          setConn(prevConn); btn.disabled = false; btn.textContent = 'Unirme';
+          $('#uMsg', el).innerHTML = `<div class="note bad">${esc(syncState.msg || 'No se pudo conectar.')}</div>`;
+          updateChip();
+          return;
+        }
+        closeModal();
+        toast('✓ Conectado. Ya ves los datos del sindicato.', 'ok');
+        renderView();
+      };
+    },
+  });
+}
+ACT['unirse'] = ()=> openUnirse(null);
+
+/* =====================================================================
+   INICIO DE LA APP
+   ===================================================================== */
+(function init(){
+  renderView();
+  const inv = parseInvitacion(location.hash);
+  if(inv){
+    history.replaceState(null, '', location.pathname + location.search);
+    const c = conn();
+    if(c && c.fileId === inv.f && c.owner === inv.o) toast('Este equipo ya está conectado a ese sindicato.');
+    else openUnirse(inv);
+  } else if(connected()){
+    syncNow({ silent: true });
+  }
+  if('serviceWorker' in navigator && /^https?:/.test(location.protocol)){
+    navigator.serviceWorker.register('./sw.js').catch(()=>{});
+  }
+})();
+
+</script>
+</body>
+</html>
