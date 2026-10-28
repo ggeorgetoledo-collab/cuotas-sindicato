@@ -2873,8 +2873,13 @@ function gdLoadGis(){
   });
 }
 /* Pide permiso a Google. Debe llamarse desde un toque del usuario (abre una ventana). */
-async function gdLogin(forceConsent){
-  await gdLoadGis();
+/* Importante en celulares: la ventana de Google debe abrirse en el mismo toque del usuario,
+   sin esperar descargas antes; por eso el script de Google se precarga al abrir la app. */
+function gdLogin(forceConsent){
+  if(!(window.google && google.accounts && google.accounts.oauth2)){
+    gdLoadGis().catch(()=>{});
+    return Promise.reject(new Error('Cargando el inicio de sesión de Google… espera 2 segundos y toca de nuevo.'));
+  }
   return new Promise((resolve, reject)=>{
     gdTokenClient = google.accounts.oauth2.initTokenClient({
       client_id: gdClientId(),
@@ -2974,15 +2979,16 @@ updateChip = function(){
 ACT['sync-now'] = async ()=>{
   if(connected()) syncNow();
   if(gdEnabled()){
-    if(!gdTokenValid()){ try{ await gdLogin(false); }catch(e){ toast('⚠ ' + e.message, 'bad'); return; } }
+    if(!gdTokenValid()){ const lg = gdLogin(false); try{ await lg; }catch(e){ toast('⚠ ' + e.message, 'bad'); return; } }
     gdSyncNow();
   }
   if(!connected() && !gdEnabled()){ goTab('ajustes'); toast('Conecta Google Drive o el repositorio para no depender de este equipo.'); }
 };
 ACT['gd-conectar'] = async el=>{
+  const login = (gdEnabled() && gdTokenValid()) ? Promise.resolve() : gdLogin(!gdEmail());
   el.disabled = true;
   try{
-    await gdLogin(!gdEmail());
+    await login;
     const ok = await gdSyncNow();
     if(ok) toast('✓ Conectado a Google Drive (' + gdEmail() + ')', 'ok');
   }catch(e){ toast('⚠ ' + e.message, 'bad'); }
@@ -3022,6 +3028,10 @@ VIEWS.ajustes.mount = _mountAjustes;
 if(gdEnabled()){ if(gdTokenValid()) setTimeout(()=> gdSyncNow({ silent: true }), 600); else gdSet('auth'); }
 document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState === 'visible' && gdEnabled() && gdTokenValid()) gdSchedule(500); });
 setInterval(()=>{ if(document.visibilityState === 'visible' && gdEnabled() && gdTokenValid() && !gdRunning) gdSyncNow({ silent: true }); }, 120000);
+
+/* Precarga el inicio de sesión de Google para que funcione el toque en el celular */
+if(navigator.onLine) setTimeout(()=> gdLoadGis().catch(()=>{}), 300);
+window.addEventListener('online', ()=> gdLoadGis().catch(()=>{}));
 renderView();
 
 </script>
