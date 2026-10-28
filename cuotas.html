@@ -379,7 +379,7 @@ function mergeStates(a, b){
 }
 function canonical(s){
   const o = { config: s.config };
-  COLS.forEach(c=> o[c] = s[c].slice().sort((x, y)=> x.id < y.id ? -1 : 1));
+  COLS.forEach(c=> o[c] = (Array.isArray(s[c]) ? s[c] : []).slice().sort((x, y)=> x.id < y.id ? -1 : 1));
   return JSON.stringify(o);
 }
 
@@ -683,10 +683,11 @@ async function syncNow(opts){
   if(!navigator.onLine){ setSync('error', 'Sin conexión a internet. Los cambios quedan guardados en este equipo y se subirán al volver la conexión.'); return false; }
   if(syncRunning){ syncAgain = true; return syncRunning; }
   syncRunning = (async ()=>{
-    setSync('busy');
-    const seqStart = changeSeq;
-    const before = canonical(S);
     try{
+    setSync('busy');
+    S = normalizeState(S);
+    var seqStart = changeSeq;
+    var before = canonical(S);
       let ok = false;
       for(let attempt = 0; attempt < 4 && !ok; attempt++){
         const remote = await ghGetFile(dataName());
@@ -719,7 +720,8 @@ async function syncNow(opts){
     }catch(e){
       let msg = e.message || String(e);
       if(e.code === 'clave') msg = 'La clave compartida no coincide con la del repositorio.';
-      if(e instanceof TypeError) msg = 'No se pudo conectar con GitHub (¿sin internet?).';
+      if(e instanceof TypeError && /fetch|network|load failed/i.test(e.message)) msg = 'No se pudo conectar con GitHub (¿sin internet?).';
+      else if(e instanceof TypeError) msg = 'Error interno: ' + e.message + ' [' + String(e.stack || '').split('\n').slice(1, 3).join(' ').replace(/https?:\/\/[^ )]+\//g, '').trim() + ']';
       setSync('error', msg);
       if(!(opts && opts.silent)) toast('⚠ ' + msg, 'bad');
       return false;
@@ -2755,7 +2757,8 @@ ACT['conectar'] = ()=>{
         }catch(e){
           setConn(prevConn);
           btn.disabled = false; btn.textContent = 'Conectar';
-          $('#cMsg', el).innerHTML = `<div class="note bad">${esc(e.message || e)}</div>`;
+          const det = e instanceof TypeError ? ' [' + String(e.stack || '').split('\n').slice(1, 3).join(' ').replace(/https?:\/\/[^ )]+\//g, '').trim() + ']' : '';
+          $('#cMsg', el).innerHTML = `<div class="note bad">${esc((e.message || e) + det)}</div>`;
           updateChip();
         }
       };
