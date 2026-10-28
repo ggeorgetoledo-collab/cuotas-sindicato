@@ -191,6 +191,10 @@ details.adv > summary{ cursor:pointer; color:var(--primary); font-weight:700; pa
 .pl-b.on.descontado{ background:var(--ok-bg); color:var(--ok); border-color:transparent; }
 .pl-b.on.rechazado{ background:var(--bad-bg); color:var(--bad); border-color:transparent; }
 @media (max-width:520px){ .pl-btns{ width:100%; flex-wrap:nowrap; } .pl-b{ flex:1 1 0; min-width:0; padding:6px 2px; font-size:0.76rem; white-space:normal; line-height:1.15; } }
+#acTabla a{ color:var(--text); text-decoration:none; }
+#acTabla .ac-b{ margin-top:6px; width:100%; min-height:34px; font-size:0.8rem; }
+#acTabla tr.done td{ opacity:1; } #acTabla tr.done input{ opacity:0.6; }
+@media (max-width:520px){ #acTabla th, #acTabla td{ padding:7px 6px; } #acTabla td:first-child{ font-size:0.9rem; } }
 #printArea{ display:none; }
 @media print{
   body > *:not(#printArea){ display:none !important; }
@@ -292,7 +296,7 @@ function rutValido(r){
 /* ---------- Estado ----------
    Cada registro lleva id, u (última modificación, ms) y del (borrado lógico).
    Así los cambios de varios dirigentes se combinan registro por registro sin pisarse. */
-const COLS = ['tarifas', 'socios', 'pagos', 'cobros', 'ajustes', 'planes', 'autoriz'];
+const COLS = ['tarifas', 'socios', 'pagos', 'cobros', 'ajustes', 'planes', 'autoriz', 'acuerdos'];
 const MEDIOS = ['Efectivo', 'Transferencia', 'Descuento por planilla', 'Depósito', 'Otro'];
 function emptyState(){
   return { v: 1, config: { nombre: '', diaVencimiento: 10, mesInicioDefault: curYm(), portalAuto: true, u: 0 }, tarifas: [], socios: [], pagos: [], cobros: [], ajustes: [] };
@@ -1740,6 +1744,146 @@ ACT['ver-plan'] = el=>{
       };
     },
   });
+};
+
+/* =====================================================================
+   ACUERDO DEL MES: lista de socios con deuda, cuánto acepta abonar cada
+   uno ese mes, y nómina en Word para que firmen la autorización.
+   ===================================================================== */
+function acuerdoDe(sid, mes){ return live('acuerdos').find(a=> a.socioId === sid && a.mes === mes) || null; }
+function acuerdoMontoSugerido(s, mes){
+  const pl = planActivoDe(s.id);
+  if(pl){ const m = planMontoMes(pl, mes); if(m.k) return m.abono; }
+  return 0;
+}
+function acuerdoFilas(mes){
+  const i = ymToIdx(mes);
+  return sociosOrdenados().filter(s=> ymToIdx(socioInicio(s)) <= i && (!s.mesTermino || ymToIdx(s.mesTermino) >= i) || acuerdoDe(s.id, mes))
+    .map(s=> ({ s, c: cuentaSocio(s), a: acuerdoDe(s.id, mes) }))
+    .map(r=> Object.assign(r, { deuda: r.c.deuda + (r.a && r.a.pagoId ? r.a.monto : 0) }))
+    .filter(r=> r.deuda > 0 || r.a);
+}
+ui.acSoloConMonto = ui.acSoloConMonto || false;
+function acuerdoHtml(){
+  const mes = ui.planMes;
+  let filas = acuerdoFilas(mes);
+  const conMonto = filas.filter(r=> r.a && r.a.monto > 0);
+  const total = conMonto.reduce((t, r)=> t + r.a.monto, 0);
+  const desc = conMonto.filter(r=> r.a.pagoId);
+  if(ui.acSoloConMonto) filas = conMonto;
+  return `<div class="card">
+    <div class="card-head"><h2>Acuerdo de abonos · ${esc(mesLabelCap(mes))}</h2>
+      <div class="btn-row"><button class="btn primary sm" data-act="ac-word" ${conMonto.length ? '' : 'disabled'}>📄 Nómina en Word para firmar</button></div></div>
+    <p class="dim small">Escribe cuánto acepta abonar cada socio a su deuda este mes (además de su cuota mensual). Se guarda solo. La nómina en Word trae nombre, RUT, deuda, monto y espacio para la firma.</p>
+    <div class="toolbar">
+      <label class="check"><input type="checkbox" id="acSolo" ${ui.acSoloConMonto ? 'checked' : ''}> Mostrar solo quienes tienen monto</label>
+      <span class="dim small" style="margin-left:auto">${conMonto.length} socio(s) · total <b>${clp(total)}</b>${desc.length ? ` · descontados ${desc.length}` : ''}</span>
+    </div>
+    ${filas.length ? `<div class="table-wrap"><table class="t" id="acTabla"><thead><tr><th>Socio</th><th class="r">Deuda vencida</th><th class="r" style="width:150px">Abona este mes</th></tr></thead><tbody>
+      ${filas.map(r=>{
+        const sug = acuerdoMontoSugerido(r.s, mes);
+        const val = r.a ? r.a.monto : (sug || '');
+        const pagado = !!(r.a && r.a.pagoId);
+        return `<tr data-sid="${r.s.id}" class="${pagado ? 'done' : ''}"><td><a href="#" data-act="ficha" data-id="${r.s.id}"><b>${esc(r.s.nombre)}</b></a>${r.c.mesesAdeudados.length ? `<div class="tiny dim">${esc(mesesTxt(r.c.mesesAdeudados))}</div>` : ''}${!r.a && sug ? '<div class="tiny dim">Sugerido por su plan de pago</div>' : ''}</td>
+          <td class="r val bad">${clp(r.deuda)}</td>
+          <td class="r"><input class="acMonto" inputmode="numeric" value="${val ? miles(val) : ''}" placeholder="$0" style="text-align:right" ${pagado ? 'disabled' : ''}>${r.a && r.a.monto > 0 ? `<button type="button" class="pl-b ac-b ${pagado ? 'on descontado' : ''}" data-act="ac-desc" data-sid="${r.s.id}">💵 ${pagado ? 'Descontado' : 'Marcar descontado'}</button>` : ''}</td></tr>`;
+      }).join('')}
+    </tbody></table></div>` : `<div class="empty">No hay socios con deuda en ${esc(mesLabel(mes))}.</div>`}
+  </div>`;
+}
+function acGuardar(sid, monto){
+  const mes = ui.planMes;
+  const a = acuerdoDe(sid, mes);
+  if(a && a.pagoId) return;
+  if(!monto){ if(a) removeRec('acuerdos', a.id, { noRender: true }); return; }
+  upsert('acuerdos', Object.assign(a || { id: 'ac-' + sid + '-' + mes, socioId: sid, mes }, { monto, por: yo() }), { noRender: true });
+}
+const _viewPlanes = VIEWS.planes, _mountPlanes = VIEWS.planes.mount;
+VIEWS.planes = function(){
+  const h = _viewPlanes();
+  // el acuerdo del mes va después de la tarjeta de descuentos (tras el selector de mes)
+  const i = h.indexOf('<div class="card">', 10);
+  return i > 0 ? h.slice(0, i) + acuerdoHtml() + h.slice(i) : h + acuerdoHtml();
+};
+VIEWS.planes.mount = function(v){
+  if(_mountPlanes) _mountPlanes(v);
+  const solo = $('#acSolo', v); if(solo) solo.onchange = ()=>{ ui.acSoloConMonto = solo.checked; renderView(); };
+  $$('.acMonto', v).forEach(inp=>{
+    inp.addEventListener('blur', ()=>{ const n = parseMonto(inp.value); inp.value = n ? miles(n) : ''; const sid = inp.closest('tr').dataset.sid; const s0 = getById('socios', sid); const max = s0 ? cuentaSocio(s0).deuda : 0; let n2 = n; if(n2 > max){ n2 = max; toast('El abono no puede superar la deuda (' + clp(max) + ').'); } const a = acuerdoDe(sid, ui.planMes); if((a ? a.monto : 0) !== n2){ acGuardar(sid, n2); const y = window.scrollY; renderView(); window.scrollTo(0, y); } });
+    inp.addEventListener('keydown', e=>{ if(e.key === 'Enter'){ e.preventDefault(); const all = $$('.acMonto'); const k = all.indexOf(inp); inp.blur(); setTimeout(()=>{ const nx = $$('.acMonto')[k + 1]; if(nx){ nx.focus(); nx.select(); } }, 50); } });
+  });
+};
+ACT['ac-desc'] = async el=>{
+  const sid = el.dataset.sid, mes = ui.planMes;
+  const a = acuerdoDe(sid, mes); if(!a) return;
+  if(a.pagoId){
+    if(!await confirmar('¿Quitar el descuento? Se eliminará el pago registrado.', 'Quitar', true)) return;
+    const p = S.pagos.find(x=> x.id === a.pagoId); if(p){ p.del = true; p.u = now(); }
+    a.pagoId = null; a.u = now(); changed();
+    return;
+  }
+  const pago = { id: uid(), socioId: sid, monto: a.monto, fecha: ui.planFecha || todayISO(), medio: 'Descuento por planilla', obs: 'Abono a deuda (acuerdo ' + mesLabel(mes) + ')', por: yo(), creado: now(), u: now() };
+  S.pagos.push(pago); a.pagoId = pago.id; a.u = now();
+  changed();
+  toast(`✓ Abono de ${clp(a.monto)} registrado`, 'ok');
+};
+
+/* ---------- Word ---------- */
+function loadDocx(){
+  if(window.docx) return Promise.resolve(window.docx);
+  return new Promise((res, rej)=>{
+    const sc = document.createElement('script');
+    sc.src = 'https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.js';
+    sc.onload = ()=> window.docx ? res(window.docx) : rej(new Error('No se pudo preparar Word.'));
+    sc.onerror = ()=> rej(new Error('No se pudo cargar el generador de Word (¿sin internet?).'));
+    document.head.appendChild(sc);
+  });
+}
+ACT['ac-word'] = async ()=>{
+  const mes = ui.planMes;
+  const filas = acuerdoFilas(mes).filter(r=> r.a && r.a.monto > 0);
+  if(!filas.length) return;
+  try{
+    const D = await loadDocx();
+    const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, AlignmentType, BorderStyle, HeightRule, VerticalAlign, PageOrientation } = D;
+    const F = 'Calibri', SZ = 22;
+    const t = (txt, o)=> new TextRun(Object.assign({ text: String(txt), font: F, size: SZ }, o || {}));
+    const p = (runs, o)=> new Paragraph(Object.assign({ children: Array.isArray(runs) ? runs : [runs] }, o || {}));
+    const b = { style: BorderStyle.SINGLE, size: 4, color: '000000' };
+    const borders = { top: b, bottom: b, left: b, right: b };
+    // ancho útil carta horizontal con márgenes de 1,5 cm ≈ 15000 dxa
+    const W = [600, 4300, 1800, 2000, 2300, 4000];
+    const cell = (content, i, o)=> new TableCell(Object.assign({ borders, width: { size: W[i], type: WidthType.DXA }, verticalAlign: VerticalAlign.CENTER, margins: { top: 60, bottom: 60, left: 100, right: 100 }, children: [p(content, { alignment: (o && o.align) || AlignmentType.LEFT })] }, (o && o.cell) || {}));
+    const R = AlignmentType.RIGHT, C = AlignmentType.CENTER;
+    const head = new TableRow({ tableHeader: true, children: [
+      cell(t('N°', { bold: true }), 0, { align: C }), cell(t('Nombre', { bold: true }), 1), cell(t('RUT', { bold: true }), 2),
+      cell(t('Deuda vencida', { bold: true }), 3, { align: R }), cell(t('Abono ' + mesLabel(mes), { bold: true }), 4, { align: R }), cell(t('Firma', { bold: true }), 5, { align: C }) ] });
+    const rows = filas.map((r, i)=> new TableRow({ height: { value: 620, rule: HeightRule.ATLEAST }, children: [
+      cell(t(i + 1), 0, { align: C }), cell(t(r.s.nombre), 1), cell(t(r.s.rut ? formatRut(r.s.rut) : ''), 2),
+      cell(t(clp(r.deuda)), 3, { align: R }), cell(t(clp(r.a.monto)), 4, { align: R }), cell(t(''), 5) ] }));
+    const total = filas.reduce((a, r)=> a + r.a.monto, 0);
+    const tot = new TableRow({ children: [ cell(t(''), 0), cell(t('Total', { bold: true }), 1), cell(t(''), 2), cell(t(clp(filas.reduce((a, r)=> a + r.deuda, 0)), { bold: true }), 3, { align: R }), cell(t(clp(total), { bold: true }), 4, { align: R }), cell(t(''), 5) ] });
+    const doc = new Document({
+      styles: { default: { document: { run: { font: F, size: SZ } } } },
+      sections: [{
+        properties: { page: { size: { width: 12240, height: 15840, orientation: PageOrientation.LANDSCAPE }, margin: { top: 850, bottom: 850, left: 850, right: 850 } } },
+        children: [
+          p(t(S.config.nombre || 'Sindicato', { bold: true })),
+          p(t('Autorización de descuento por planilla: abono a cuotas sindicales adeudadas · ' + mesLabelCap(mes), { bold: true }), { spacing: { after: 120 } }),
+          p(t('Quienes firman autorizan que se descuente de su remuneración del mes de ' + mesLabel(mes) + ' el monto indicado en la columna "Abono", como pago de cuotas sindicales adeudadas. Este monto es adicional a la cuota sindical mensual.'), { spacing: { after: 200 } }),
+          new Table({ width: { size: W.reduce((a, x)=> a + x, 0), type: WidthType.DXA }, columnWidths: W, rows: [head].concat(rows, [tot]) }),
+          p(t(''), { spacing: { before: 400 } }),
+          p(t('Fecha: ____ / ____ / ________        Firma tesorería: ______________________________')),
+        ],
+      }],
+    });
+    const blob = await Packer.toBlob(doc);
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `autorizacion-abonos-${mes}.docx`;
+    a.click();
+    setTimeout(()=> URL.revokeObjectURL(a.href), 3000);
+  }catch(e){ toast('⚠ ' + (e.message || e), 'bad'); }
 };
 
 /* =====================================================================
