@@ -296,7 +296,7 @@ function rutValido(r){
 /* ---------- Estado ----------
    Cada registro lleva id, u (última modificación, ms) y del (borrado lógico).
    Así los cambios de varios dirigentes se combinan registro por registro sin pisarse. */
-const COLS = ['tarifas', 'socios', 'pagos', 'cobros', 'ajustes', 'planes', 'autoriz', 'acuerdos'];
+const COLS = ['tarifas', 'socios', 'pagos', 'cobros', 'ajustes', 'planes', 'autoriz', 'acuerdos', 'nominas'];
 const MEDIOS = ['Efectivo', 'Transferencia', 'Descuento por planilla', 'Depósito', 'Otro'];
 function emptyState(){
   return { v: 1, config: { nombre: '', diaVencimiento: 10, mesInicioDefault: curYm(), portalAuto: true, u: 0 }, tarifas: [], socios: [], pagos: [], cobros: [], ajustes: [] };
@@ -1773,10 +1773,12 @@ function acuerdoHtml(){
   if(ui.acSoloConMonto) filas = conMonto;
   return `<div class="card">
     <div class="card-head"><h2>Acuerdo de abonos · ${esc(mesLabelCap(mes))}</h2>
-      <div class="btn-row"><button class="btn primary sm" data-act="ac-word" ${conMonto.length ? '' : 'disabled'}>📄 Nómina en Word para firmar</button></div></div>
-    <p class="dim small">Escribe cuánto acepta abonar cada socio a su deuda este mes (además de su cuota mensual). Se guarda solo. La nómina en Word trae nombre, RUT, deuda, monto y espacio para la firma.</p>
+      <div class="btn-row"><button class="btn primary sm" data-act="ac-word" ${conMonto.length ? '' : 'disabled'}>📄 Guardar y descargar Word</button></div></div>
+    <p class="dim small">Escribe cuánto acepta abonar cada socio a su deuda este mes (además de su cuota mensual). Se guarda solo. Para poner el mismo monto a todos, escríbelo y toca "Aplicar a todos" (a quien debe menos se le pone el total de su deuda; con 0 se borran los montos). Al descargar el Word, la planilla queda guardada en el historial.</p>
     <div class="toolbar">
-      <label class="check"><input type="checkbox" id="acSolo" ${ui.acSoloConMonto ? 'checked' : ''}> Mostrar solo quienes tienen monto</label>
+      <input id="acTodos" inputmode="numeric" placeholder="Ej: 5.000" style="width:120px">
+      <button class="btn sm" data-act="ac-todos">Aplicar a todos</button>
+      <label class="check"><input type="checkbox" id="acSolo" ${ui.acSoloConMonto ? 'checked' : ''}> Solo con monto</label>
       <span class="dim small" style="margin-left:auto">${conMonto.length} socio(s) · total <b>${clp(total)}</b>${desc.length ? ` · descontados ${desc.length}` : ''}</span>
     </div>
     ${filas.length ? `<div class="table-wrap"><table class="t" id="acTabla"><thead><tr><th>Socio</th><th class="r">Deuda vencida</th><th class="r" style="width:150px">Abona este mes</th></tr></thead><tbody>
@@ -1803,7 +1805,7 @@ VIEWS.planes = function(){
   const h = _viewPlanes();
   // el acuerdo del mes va después de la tarjeta de descuentos (tras el selector de mes)
   const i = h.indexOf('<div class="card">', 10);
-  return i > 0 ? h.slice(0, i) + acuerdoHtml() + h.slice(i) : h + acuerdoHtml();
+  return (i > 0 ? h.slice(0, i) + acuerdoHtml() + h.slice(i) : h + acuerdoHtml()) + historialHtml();
 };
 VIEWS.planes.mount = function(v){
   if(_mountPlanes) _mountPlanes(v);
@@ -1839,10 +1841,10 @@ function loadDocx(){
     document.head.appendChild(sc);
   });
 }
-ACT['ac-word'] = async ()=>{
-  const mes = ui.planMes;
-  const filas = acuerdoFilas(mes).filter(r=> r.a && r.a.monto > 0);
-  if(!filas.length) return;
+/* Genera el Word a partir de una planilla guardada (snapshot) */
+async function nominaWord(nm){
+  const mes = nm.mes;
+  const filas = nm.filas.map(f=> ({ s: { nombre: f.nombre, rut: f.rut }, deuda: f.deuda, a: { monto: f.monto } }));
   try{
     const D = await loadDocx();
     const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, AlignmentType, BorderStyle, HeightRule, VerticalAlign, PageOrientation } = D;
@@ -1880,10 +1882,75 @@ ACT['ac-word'] = async ()=>{
     const blob = await Packer.toBlob(doc);
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `autorizacion-abonos-${mes}.docx`;
+    a.download = `autorizacion-abonos-${mes}${nm.n > 1 ? '-' + nm.n : ''}.docx`;
     a.click();
     setTimeout(()=> URL.revokeObjectURL(a.href), 3000);
   }catch(e){ toast('⚠ ' + (e.message || e), 'bad'); }
+}
+
+/* ---------- Guardar planilla e historial ---------- */
+function nominasDelMes(mes){ return live('nominas').filter(n=> n.mes === mes).sort((a, b)=> (a.creado || 0) - (b.creado || 0)); }
+function guardarNomina(){
+  const mes = ui.planMes;
+  const filas = acuerdoFilas(mes).filter(r=> r.a && r.a.monto > 0).map(r=> ({ sid: r.s.id, nombre: r.s.nombre, rut: r.s.rut ? formatRut(r.s.rut) : '', deuda: r.deuda, monto: r.a.monto }));
+  if(!filas.length) return null;
+  const n = nominasDelMes(mes).length + 1;
+  const nm = { id: uid(), mes, n, creado: now(), por: yo(), filas, total: filas.reduce((a, f)=> a + f.monto, 0) };
+  upsert('nominas', nm, { noRender: true });
+  return nm;
+}
+ACT['ac-word'] = async el=>{
+  const nm = guardarNomina(); if(!nm) return;
+  el.disabled = true;
+  await nominaWord(nm);
+  el.disabled = false;
+  toast(`✓ Planilla de ${mesLabel(nm.mes)} guardada en el historial`, 'ok');
+  const y = window.scrollY; renderView(); window.scrollTo(0, y);
+};
+ACT['ac-hist-word'] = async el=>{ const nm = getById('nominas', el.dataset.id); if(nm) await nominaWord(nm); };
+ACT['ac-hist-ver'] = el=>{
+  const id = el.dataset.id;
+  openModal({
+    wide: true,
+    title: ()=>{ const nm = getById('nominas', id); return nm ? 'Planilla de abonos · ' + esc(mesLabelCap(nm.mes)) + (nm.n > 1 ? ' (' + nm.n + ')' : '') : 'Planilla'; },
+    body: ()=>{
+      const nm = getById('nominas', id); if(!nm) return '<div class="empty">Planilla eliminada.</div>';
+      const est = f=>{ const a = acuerdoDe(f.sid, nm.mes); return a && a.pagoId ? '<span class="chip ok">Descontado</span>' : '<span class="chip neutral">Pendiente</span>'; };
+      return `<div class="note small">Guardada el ${fdatetime(nm.creado)}${nm.por ? ' por ' + esc(nm.por) : ''} · ${nm.filas.length} socio(s) · total ${clp(nm.total)}</div>
+        <div class="table-wrap"><table class="t"><thead><tr><th>N°</th><th>Nombre</th><th class="r">Deuda</th><th class="r">Abono</th><th>Estado</th></tr></thead><tbody>
+        ${nm.filas.map((f, i)=> `<tr><td>${i + 1}</td><td>${esc(f.nombre)}</td><td class="r">${clp(f.deuda)}</td><td class="r"><b>${clp(f.monto)}</b></td><td>${est(f)}</td></tr>`).join('')}
+        <tr><td></td><td><b>Total</b></td><td class="r">${clp(nm.filas.reduce((a, f)=> a + f.deuda, 0))}</td><td class="r"><b>${clp(nm.total)}</b></td><td></td></tr></tbody></table></div>`;
+    },
+    foot: ()=> `<button class="btn danger" id="nmDel">Eliminar del historial</button><span style="flex:1"></span><button class="btn" data-act="close-modal">Cerrar</button><button class="btn primary" data-act="ac-hist-word" data-id="${id}">📄 Descargar Word</button>`,
+    onMount: (el)=>{
+      $('#nmDel', el).onclick = async ()=>{ if(!await confirmar('¿Eliminar esta planilla del historial? No cambia los montos ni los pagos registrados.', 'Eliminar', true)) return; closeModal(); removeRec('nominas', id); };
+    },
+  });
+};
+function historialHtml(){
+  const all = live('nominas').sort((a, b)=> (b.mes || '').localeCompare(a.mes || '') || (b.creado || 0) - (a.creado || 0));
+  return `<div class="card"><h2>Historial de planillas de abonos (${all.length})</h2>
+    ${all.length ? all.map(nm=> `<div class="row"><div class="main"><div class="title">${esc(mesLabelCap(nm.mes))}${nm.n > 1 ? ' · versión ' + nm.n : ''}</div><div class="sub">${nm.filas.length} socio(s) · total ${clp(nm.total)} · guardada el ${fdatetime(nm.creado)}${nm.por ? ' por ' + esc(nm.por) : ''}</div></div>
+      <div class="btn-row"><button class="btn sm" data-act="ac-hist-ver" data-id="${nm.id}">Ver</button><button class="btn sm" data-act="ac-hist-word" data-id="${nm.id}">📄 Word</button></div></div>`).join('') : '<div class="empty">Aún no hay planillas guardadas. Se guardan al descargar la nómina en Word.</div>'}
+  </div>`;
+}
+
+/* ---------- Mismo monto a todos ---------- */
+ACT['ac-todos'] = ()=>{
+  const v = parseMonto(($('#acTodos') || {}).value);
+  const mes = ui.planMes;
+  const filas = acuerdoFilas(mes).filter(r=> !(r.a && r.a.pagoId) && r.c.deuda > 0);
+  if(!filas.length) return;
+  let topados = 0;
+  filas.forEach(r=>{
+    const m = Math.min(v, r.c.deuda); if(v > r.c.deuda) topados++;
+    const a = acuerdoDe(r.s.id, mes);
+    if(!m){ if(a){ a.del = true; a.u = now(); } return; }
+    if(a){ a.monto = m; a.por = yo(); a.u = now(); a.del = false; }
+    else S.acuerdos.push({ id: 'ac-' + r.s.id + '-' + mes, socioId: r.s.id, mes, monto: m, por: yo(), u: now() });
+  });
+  changed();
+  toast(v ? `✓ ${clp(v)} a ${filas.length} socio(s)${topados ? ` · ${topados} con el máximo de su deuda` : ''}` : '✓ Montos borrados', 'ok');
 };
 
 /* =====================================================================
