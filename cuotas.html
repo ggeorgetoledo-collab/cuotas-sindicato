@@ -368,6 +368,7 @@ function tarifaActual(){ return tarifaDe(curYm()); }
 function diaVenc(){ const d = Number(S.config.diaVencimiento); return d >= 1 && d <= 31 ? d : 10; }
 /* Último mes ya vencido (índice). Si hoy no llega al día de vencimiento, el mes en curso aún no vence. */
 function dueIdx(){ const d = new Date(); const cur = ymToIdx(curYm()); return d.getDate() >= diaVenc() ? cur : cur - 1; }
+function itemClave(it){ return it.tipo + '|' + it.mes + '|' + (it.ref || ''); }
 function socioInicio(s){ return s.mesInicio || S.config.mesInicioDefault || curYm(); }
 function socioActivo(s){ return !s.mesTermino || ymToIdx(s.mesTermino) >= ymToIdx(curYm()); }
 function cobroAplica(c, s){
@@ -404,6 +405,9 @@ function cuentaSocio(s, hastaIdx){
   });
   // dentro de un mes, los cobros y cargos se imputan antes que la cuota (así un aporte pagado junto a la cuota no queda como deuda)
   const ORD = { cobro: 0, cargo: 1, cuota: 2, exento: 2 };
+  // Condonaciones: dejan en $0 cuotas, cobros o cargos específicos
+  const cond = new Map(aj.filter(a=> a.tipo === 'condonacion').map(a=> [a.clave, a]));
+  items.forEach(it=>{ const k = itemClave(it); if(it.monto > 0 && cond.has(k)){ it.montoOriginal = it.monto; it.monto = 0; it.condonado = true; it.condId = cond.get(k).id; it.concepto += ' (condonada)'; } });
   items.sort((x, y)=> x.idx - y.idx || ORD[x.tipo] - ORD[y.tipo]);
   const pagos = live('pagos').filter(p=> p.socioId === s.id);
   const descuentos = aj.filter(a=> a.tipo === 'descuento');
@@ -464,6 +468,7 @@ function estadoMeses(s, year){
     if(i < start || i > endSocio){ st = 'nosocio'; txt = '—'; }
     else if(!it){ st = 'exento'; txt = 'Sin cuota'; }
     else if(it.tipo === 'exento'){ st = 'exento'; txt = 'Exento'; }
+    else if(it.condonado){ st = 'exento'; txt = 'Condonada'; }
     else if(it.estado === 'pagado'){ st = i > due ? 'adelantado' : 'pagado'; txt = i > due ? 'Adelantado' : 'Pagado'; }
     else if(i > due){ st = 'porvencer'; txt = it.estado === 'parcial' ? 'Abono ' + clp(it.pagado) : 'Por vencer'; }
     else if(it.estado === 'parcial'){ st = 'parcial'; txt = 'Debe ' + clp(it.monto - it.pagado); }
@@ -743,7 +748,7 @@ function buildPortalPayload(s){
     nombre: s.nombre, rut: s.rut ? formatRut(s.rut) : '',
     cuota: tarifaActual(), dv: diaVenc(),
     ini: socioInicio(s), fin: s.mesTermino || '',
-    items: c.items.map(it=> ({ t: it.tipo, m: it.mes, c: it.concepto, mo: it.monto, p: it.pagado || 0 })),
+    items: c.items.map(it=> ({ t: it.condonado && it.tipo === 'cuota' ? 'exento' : it.tipo, m: it.mes, c: it.concepto, mo: it.monto, p: it.pagado || 0 })),
     pagos: c.pagos.slice().sort((a, b)=> (b.fecha || '').localeCompare(a.fecha || '')).slice(0, 60).map(p=> ({ f: p.fecha, mo: Number(p.monto) || 0, me: p.medio || '' })),
     desc: c.descuentos.map(d=> ({ m: d.mes, mo: Number(d.monto) || 0, c: d.concepto || 'Descuento' })),
     plan: (()=>{ const pl = (typeof planActivoDe === 'function') && planActivoDe(s.id); if(!pl) return null; const r = planResumen(pl); const nx = planMontoMes(pl, idxToYm(ymToIdx(curYm()) + (planMarca(pl, curYm()) ? 1 : 0))); return { n: r.n, p: r.pagadas, mo: Number(pl.montoCuota) || 0, inc: !!pl.incluyeCuota, fin: r.fin, saldo: r.saldo, prox: nx.total }; })(),
@@ -995,6 +1000,7 @@ VIEWS.socios = function(){
         ${[['todos', 'Activos'], ['deuda', 'Con deuda'], ['aldia', 'Al día'], ['retirados', 'Retirados']].map(([k, l])=> `<button type="button" data-f="${k}" class="${f === k ? 'active' : ''}">${l} (${k === 'todos' ? all.filter(socioActivo).length : cnt(k)})</button>`).join('')}
       </div>
     </div>
+    ${(f === 'retirados' || f === 'deuda') && rows.some(r=> r.c.deuda > 0) ? `<div class="toolbar"><button class="btn sm danger" data-act="condonar-varios" data-ids="${rows.filter(r=> r.c.deuda > 0).map(r=> r.s.id).join(',')}">🧽 Borrar deuda de esta lista (${rows.filter(r=> r.c.deuda > 0).length})</button></div>` : ''}
     <div id="sLista">${sociosRows(rows)}</div>
   </div>`;
 };
@@ -1169,6 +1175,7 @@ function fichaBody(id){
   <div class="btn-row" style="margin-bottom:14px">
     <button class="btn primary" data-act="nuevo-pago" data-id="${id}">💵 Registrar pago</button>
     <button class="btn" data-act="ajuste" data-id="${id}">➕ Exención / cargo / descuento</button>
+    ${c.deuda > 0 ? `<button class="btn" data-act="condonar" data-id="${id}">🧽 Borrar deuda</button>` : ''}
     ${(()=>{ const pl = planActivoDe(id); return pl ? `<button class="btn" data-act="ver-plan" data-id="${pl.id}">🤝 Plan de pago (${planResumen(pl).pagadas}/${pl.cuotas})</button>` : (c.deuda > 0 ? `<button class="btn" data-act="nuevo-plan" data-id="${id}">🤝 Crear plan de pago</button>` : ''); })()}
     <button class="btn" data-act="tarjeta" data-id="${id}">🪪 Tarjeta y PIN</button>
     <button class="btn" data-act="print-estado" data-id="${id}">🖨️ Estado de cuenta</button>
@@ -1194,7 +1201,7 @@ function fichaBody(id){
     ${pagos.map(p=> `<tr><td>${fdate(p.fecha)}${p.obs ? `<div class="tiny dim">${esc(p.obs)}</div>` : ''}</td><td class="r"><b>${clp(p.monto)}</b></td><td>${esc(p.medio || '')}</td><td class="small dim">${esc(p.por || '')}</td><td class="r"><button class="btn ghost sm" data-act="editar-pago" data-id="${p.id}" title="Editar">✏️</button></td></tr>`).join('')}
   </tbody></table></div>` : `<div class="empty">Sin pagos registrados.</div>`}
   ${ajustes.length ? `<h3>Exenciones, cargos y descuentos</h3>
-    ${ajustes.map(a=> `<div class="row"><div class="main"><div class="title">${a.tipo === 'exencion' ? 'Exención de cuota' : a.tipo === 'cargo' ? 'Cargo' : 'Descuento'} · ${esc(mesLabel(a.mes, true))}</div><div class="sub">${esc(a.concepto || '')}${a.por ? ' · ' + esc(a.por) : ''}</div></div>${a.tipo !== 'exencion' ? `<div class="val ${a.tipo === 'cargo' ? 'bad' : 'ok'}">${a.tipo === 'cargo' ? '+' : '−'}${clp(a.monto)}</div>` : ''}<button class="btn ghost sm" data-act="borrar-ajuste" data-id="${a.id}" title="Quitar">🗑️</button></div>`).join('')}` : ''}
+    ${ajustes.map(a=> `<div class="row"><div class="main"><div class="title">${a.tipo === 'exencion' ? 'Exención de cuota' : a.tipo === 'cargo' ? 'Cargo' : a.tipo === 'condonacion' ? 'Deuda condonada' : 'Descuento'} · ${esc(mesLabel(a.mes, true))}</div><div class="sub">${esc(a.concepto || '')}${a.por ? ' · ' + esc(a.por) : ''}</div></div>${a.tipo !== 'exencion' && a.monto ? `<div class="val ${a.tipo === 'cargo' ? 'bad' : 'ok'}">${a.tipo === 'cargo' ? '+' : '−'}${clp(a.monto)}</div>` : ''}<button class="btn ghost sm" data-act="borrar-ajuste" data-id="${a.id}" title="Quitar">🗑️</button></div>`).join('')}` : ''}
   ${s.notas ? `<div class="note"><b>Notas:</b> ${esc(s.notas)}</div>` : ''}
   <div class="note small">Los pagos se imputan primero a la deuda más antigua. Si un socio paga de más, el saldo a favor cubre los meses siguientes.</div>`;
 }
@@ -1457,6 +1464,52 @@ ACT['tarjeta'] = el=>{
   });
 };
 ACT['go-ajustes-close'] = ()=>{ while(modalStack.length) closeModal(); goTab('ajustes'); };
+
+/* =====================================================================
+   BORRAR (CONDONAR) DEUDA: deja en $0 las cuotas o cobros que se elijan.
+   Se puede deshacer quitando la condonación en la ficha del socio.
+   ===================================================================== */
+function openCondonar(ids){
+  const lista = ids.map(id=> getById('socios', id)).filter(Boolean);
+  const pend = s=> cuentaSocio(s).items.filter(it=> it.vencido && it.monto > 0 && it.estado !== 'pagado');
+  const sel = new Set();
+  lista.forEach(s=> pend(s).forEach(it=> sel.add(s.id + '§' + itemClave(it))));
+  const m = openModal({
+    wide: true,
+    title: ()=> lista.length === 1 ? 'Borrar deuda · ' + esc(lista[0].nombre) : `Borrar deuda de ${lista.length} socios`,
+    body: ()=>{
+      let total = 0;
+      const bloques = lista.map(s=>{
+        const its = pend(s);
+        return `${lista.length > 1 ? `<h3>${esc(s.nombre)}</h3>` : ''}${its.map(it=>{ const k = s.id + '§' + itemClave(it); const on = sel.has(k); const v = it.monto - it.pagado; if(on) total += v;
+          return `<label class="check" style="padding:6px 0;justify-content:space-between"><span style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="cdChk" data-k="${esc(k)}" ${on ? 'checked' : ''}> ${esc(it.concepto)}${it.pagado ? ` <span class="dim small">(abonado ${clp(it.pagado)})</span>` : ''}</span><b>${clp(v)}</b></label>`; }).join('')}`;
+      }).join('');
+      return `<p class="dim small">Marca lo que se borra. Las cuotas y cobros marcados quedan en $0 ("condonados"). Se puede deshacer desde la ficha del socio.</p>
+        <div class="toolbar"><button class="btn sm" id="cdAll">Marcar todo</button><button class="btn sm" id="cdNone">Desmarcar todo</button><span style="margin-left:auto" class="small">Se borran <b>${clp(total)}</b></span></div>
+        <div style="max-height:46vh;overflow:auto">${bloques}</div>
+        <label class="f" style="margin-top:10px">Motivo (opcional)<input id="cdMot" placeholder="Ej: Acuerdo de asamblea 28/10/2026"></label>`;
+    },
+    foot: ()=> `<button class="btn" data-act="close-modal">Cancelar</button><button class="btn danger" id="cdOk">Borrar deuda marcada</button>`,
+    onMount: (el)=>{
+      const mot = ()=> ($('#cdMot', el) || {}).value || '';
+      $$('.cdChk', el).forEach(c=> c.onchange = ()=>{ const v = mot(); c.checked ? sel.add(c.dataset.k) : sel.delete(c.dataset.k); drawModal(m); $('#cdMot', m.el).value = v; });
+      $('#cdAll', el).onclick = ()=>{ const v = mot(); lista.forEach(s=> pend(s).forEach(it=> sel.add(s.id + '§' + itemClave(it)))); drawModal(m); $('#cdMot', m.el).value = v; };
+      $('#cdNone', el).onclick = ()=>{ const v = mot(); sel.clear(); drawModal(m); $('#cdMot', m.el).value = v; };
+      $('#cdOk', el).onclick = async ()=>{
+        if(!sel.size){ toast('No hay nada marcado.', 'bad'); return; }
+        const motivo = mot().trim();
+        let total = 0; const nuevos = [];
+        lista.forEach(s=> pend(s).forEach(it=>{ if(sel.has(s.id + '§' + itemClave(it))){ total += it.monto - it.pagado; nuevos.push({ id: uid(), socioId: s.id, tipo: 'condonacion', clave: itemClave(it), mes: it.mes, monto: it.monto, concepto: (it.concepto + (motivo ? ' · ' + motivo : '')), por: yo(), u: now() }); } }));
+        if(!await confirmar(`¿Borrar ${clp(total)} de deuda (${nuevos.length} ítem${nuevos.length > 1 ? 's' : ''})?`, 'Borrar deuda', true)) return;
+        S.ajustes.push(...nuevos);
+        closeModal(); changed(); refreshOpenModal();
+        toast(`✓ Deuda borrada: ${clp(total)}`, 'ok');
+      };
+    },
+  });
+}
+ACT['condonar'] = el=> openCondonar([el.dataset.id]);
+ACT['condonar-varios'] = el=> openCondonar(el.dataset.ids.split(',').filter(Boolean));
 
 /* =====================================================================
    PLANES DE PAGO (convenios de deuda con descuento por planilla)
