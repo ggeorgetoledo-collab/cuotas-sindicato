@@ -3077,7 +3077,7 @@ const _vSocios = VIEWS.socios, _mSocios = VIEWS.socios.mount;
 VIEWS.socios = function(){
   const h = _vSocios();
   const conMail = live('socios').filter(s=> !socioBaja(s) && emailValido(s.email)).length;
-  const bar = `<div class="toolbar"><button class="btn sm" data-act="correos">✉️ Enviar estados de cuenta por correo</button><button class="btn sm" data-act="pegar-correos">📋 Pegar correos</button><span class="dim small">${conMail} socio(s) activos con correo</span></div>`;
+  const bar = `<div class="toolbar"><button class="btn sm" data-act="correos">✉️ Enviar estados de cuenta por correo</button><button class="btn sm" data-act="pegar-correos">📋 Pegar correos</button><button class="btn sm" data-act="excel-socios">📊 Exportar a Excel</button><span class="dim small">${conMail} socio(s) activos con correo</span></div>`;
   const i = h.indexOf('<div class="toolbar">');
   return i > 0 ? h.slice(0, i) + bar + h.slice(i) : h;
 };
@@ -3126,6 +3126,57 @@ VIEWS.ajustes.mount = function(v){
   if(d) d.onchange = ()=> setConfig({ correoDia: Number(d.value) || 0 }, { noRender: true });
   if(q) q.onchange = ()=> setConfig({ correoSoloDeuda: q.value === '1' }, { noRender: true });
   if(a) a.onchange = ()=> setConfig({ correoAbrirSolo: a.checked }, { noRender: true });
+};
+
+/* =====================================================================
+   EXPORTAR SOCIOS A EXCEL: datos y correo, historial mensual y movimientos
+   ===================================================================== */
+function estadoSocioTxt(s){ return socioBaja(s) ? 'Dado de baja' : socioSuspendido(s) ? 'Suspendido' : 'Activo'; }
+ACT['excel-socios'] = async ()=>{
+  try{
+    const XLSX = await loadXLSX();
+    const socios = sociosOrdenados();
+    const correos = live('correos').filter(x=> x.ok);
+    const wb = XLSX.utils.book_new();
+    // 1) Socios
+    const h1 = socios.map(s=>{ const c = cuentaSocio(s); const ce = correos.filter(x=> x.socioId === s.id).sort((a, b)=> (b.fecha || '').localeCompare(a.fecha || ''));
+      return { 'Nombre': s.nombre, 'RUT': s.rut ? formatRut(s.rut) : '', 'Correo': s.email || '', 'Teléfono': s.telefono || '', 'Estado': estadoSocioTxt(s),
+        'Socio desde': mesLabelCap(socioInicio(s)), 'Último mes (baja)': s.mesTermino ? mesLabelCap(s.mesTermino) : '', 'Suspendido desde': s.suspDesde ? mesLabelCap(s.suspDesde) : '',
+        'Deuda vencida': c.deuda, 'N° meses adeudados': c.mesesAdeudados.length, 'Meses adeudados': c.mesesAdeudados.map(m=> mesLabel(m, true)).join(', '),
+        'Saldo a favor': c.saldoFavor, 'Total pagado': c.totalPagos, 'Último pago': c.ultimoPago ? fdate(c.ultimoPago.fecha) : '',
+        'Correos enviados': ce.length, 'Último correo': ce[0] ? fdate(ce[0].fecha) : '', 'Notas': s.notas || '' }; });
+    const w1 = XLSX.utils.json_to_sheet(h1);
+    w1['!cols'] = [32, 13, 30, 14, 13, 15, 15, 15, 12, 10, 40, 11, 12, 12, 10, 12, 30].map(w=> ({ wch: w }));
+    w1['!autofilter'] = { ref: w1['!ref'] };
+    XLSX.utils.book_append_sheet(wb, w1, 'Socios');
+    // 2) Historial mensual
+    const ini = socios.reduce((a, s)=> Math.min(a, ymToIdx(socioInicio(s))), ymToIdx(curYm()));
+    const fin = ymToIdx(curYm());
+    const h2 = socios.map(s=>{ const r = { 'Nombre': s.nombre, 'Correo': s.email || '', 'Estado': estadoSocioTxt(s) };
+      const anios = {};
+      for(let i = ini; i <= fin; i++){ const y = Math.floor(i / 12); anios[y] = anios[y] || estadoMeses(s, y); const m = anios[y][i % 12]; r[mesLabel(idxToYm(i), true)] = m.txt; }
+      r['Deuda vencida'] = cuentaSocio(s).deuda; return r; });
+    const w2 = XLSX.utils.json_to_sheet(h2);
+    w2['!cols'] = [{ wch: 30 }, { wch: 28 }, { wch: 12 }].concat(Array(fin - ini + 1).fill({ wch: 12 })).concat([{ wch: 12 }]);
+    XLSX.utils.book_append_sheet(wb, w2, 'Historial mensual');
+    // 3) Movimientos
+    const mv = [];
+    socios.forEach(s=>{
+      const c = cuentaSocio(s);
+      const tipoTxt = it=> it.tipo === 'cuota' ? 'Cuota' : it.tipo === 'cobro' ? 'Cuota extraordinaria' : it.tipo === 'cargo' ? 'Cargo' : it.susp ? 'Suspendido' : 'Exento';
+      c.items.filter(it=> it.vencido || it.pagado).forEach(it=> mv.push({ k: it.mes + '-00', 'Socio': s.nombre, 'Correo': s.email || '', 'Fecha': mesLabelCap(it.mes), 'Tipo': it.condonado ? 'Condonación' : tipoTxt(it), 'Concepto': it.concepto, 'Cobrado': it.condonado ? 0 : it.monto, 'Pagado': it.pagado || 0, 'Estado': it.condonado ? 'Condonada' : it.tipo === 'exento' ? it.motivo || 'Exento' : it.estado === 'pagado' ? 'Pagado' : it.estado === 'parcial' ? 'Parcial' : 'Pendiente', 'Detalle': '' }));
+      c.pagos.forEach(p=> mv.push({ k: p.fecha || '', 'Socio': s.nombre, 'Correo': s.email || '', 'Fecha': fdate(p.fecha), 'Tipo': 'Pago', 'Concepto': p.medio || '', 'Cobrado': '', 'Pagado': Number(p.monto) || 0, 'Estado': '', 'Detalle': [p.obs, p.por ? 'registró ' + p.por : ''].filter(Boolean).join(' · ') }));
+      c.descuentos.forEach(d=> mv.push({ k: (d.mes || '') + '-00', 'Socio': s.nombre, 'Correo': s.email || '', 'Fecha': mesLabelCap(d.mes), 'Tipo': 'Descuento', 'Concepto': d.concepto || '', 'Cobrado': '', 'Pagado': Number(d.monto) || 0, 'Estado': '', 'Detalle': '' }));
+      correos.filter(x=> x.socioId === s.id).forEach(x=> mv.push({ k: (x.fecha || '').slice(0, 10), 'Socio': s.nombre, 'Correo': x.email || s.email || '', 'Fecha': fdate(x.fecha), 'Tipo': 'Correo enviado', 'Concepto': 'Estado de cuenta', 'Cobrado': '', 'Pagado': '', 'Estado': '', 'Detalle': 'Deuda informada: ' + clp(x.deuda) }));
+    });
+    const orden = new Map(socios.map((s, i)=> [s.nombre, i]));
+    mv.sort((a, b)=> orden.get(a['Socio']) - orden.get(b['Socio']) || a.k.localeCompare(b.k));
+    const w3 = XLSX.utils.json_to_sheet(mv.map(({ k, ...r })=> r));
+    w3['!cols'] = [30, 28, 16, 20, 40, 11, 11, 12, 44].map(w=> ({ wch: w }));
+    w3['!autofilter'] = { ref: w3['!ref'] };
+    XLSX.utils.book_append_sheet(wb, w3, 'Movimientos');
+    XLSX.writeFile(wb, `socios-${normTxt(S.config.nombre || 'sindicato').replace(/[^a-z0-9]+/g, '-').slice(0, 30)}-${todayISO()}.xlsx`);
+  }catch(e){ toast('⚠ ' + (e.message || e), 'bad'); }
 };
 
 /* =====================================================================
