@@ -1077,7 +1077,7 @@ function openSocioForm(id){
     body: ()=> `<div class="grid2">
       <label class="f span2">Nombre completo *<input id="fNombre" value="${esc(s.nombre)}" autocomplete="off"></label>
       <label class="f">RUT<input id="fRut" value="${esc(s.rut ? formatRut(s.rut) : '')}" placeholder="12.345.678-9" autocomplete="off"></label>
-      <label class="f">Teléfono<input id="fTel" type="tel" value="${esc(s.telefono || '')}"></label>
+      <label class="f">Teléfono<span style="display:flex;gap:6px"><input id="fTel" type="tel" value="${esc(s.telefono || '')}">${typeof contactosOk === 'function' && contactosOk() ? '<button type="button" class="btn sm" id="fTelC" title="Elegir de mis contactos">📇</button>' : ''}</span></label>
       <label class="f span2">Correo<input id="fEmail" type="email" value="${esc(s.email || '')}"></label>
       <label class="f">Paga cuota desde *<input id="fIni" type="month" value="${esc(s.mesInicio || '')}"></label>
       <label class="f">Dado de baja: último mes que paga<input id="fFin" type="month" value="${esc(s.mesTermino || '')}"></label>
@@ -1090,6 +1090,8 @@ function openSocioForm(id){
     onMount: (el)=>{
       $('#fNombre', el).focus();
       $('#fRut', el).addEventListener('blur', e=>{ if(e.target.value.trim()) e.target.value = formatRut(e.target.value); });
+      const tc = $('#fTelC', el);
+      if(tc) tc.onclick = async ()=>{ try{ const r = await navigator.contacts.select(['name', 'tel'], { multiple: false }); const c = r && r[0]; if(!c) return; const t = (c.tel || []).find(x=> normFono(x)) || (c.tel || [])[0]; if(t) $('#fTel', el).value = t.trim(); if(!$('#fNombre', el).value.trim() && c.name && c.name[0]) $('#fNombre', el).value = c.name[0]; }catch(e){ toast('No se pudo abrir tus contactos.', 'bad'); } };
       $('#fSave', el).onclick = ()=>{
         const nombre = $('#fNombre', el).value.trim().replace(/\s+/g, ' ');
         const rut = $('#fRut', el).value.trim();
@@ -3040,22 +3042,24 @@ ACT['correo-socio'] = el=>{
 };
 
 /* ---------- Pegar correos en lote ---------- */
+function matchSocio(nombre){
+  const n = normTxt(nombre).replace(/[^a-z ]/g, ' ').split(/\s+/).filter(Boolean);
+  let best = null, bs = 0;
+  live('socios').forEach(s=>{
+    const t = normTxt(s.nombre).replace(/[^a-z ]/g, ' ').split(/\s+/).filter(Boolean);
+    const sc = t.filter(w=> n.includes(w)).length / Math.max(t.length, 1);
+    if(sc > bs){ bs = sc; best = s; }
+  });
+  return bs >= 0.99 || (best && bs >= 0.5 && normTxt(best.nombre).split(/\s+/).filter(w=> n.includes(w)).length >= 2) ? best : null;
+}
+
 ACT['pegar-correos'] = ()=>{
   const st = { res: [] };
-  const match = nombre=>{
-    const n = normTxt(nombre).replace(/[^a-z ]/g, ' ').split(/\s+/).filter(Boolean);
-    let best = null, bs = 0;
-    live('socios').forEach(s=>{
-      const t = normTxt(s.nombre).replace(/[^a-z ]/g, ' ').split(/\s+/).filter(Boolean);
-      const sc = t.filter(w=> n.includes(w)).length / Math.max(t.length, 1);
-      if(sc > bs){ bs = sc; best = s; }
-    });
-    return bs >= 0.99 || (best && bs >= 0.5 && normTxt(best.nombre).split(/\s+/).filter(w=> n.includes(w)).length >= 2) ? best : null;
-  };
+  const match = matchSocio;
   const m = openModal({
     wide: true,
     title: ()=> 'Agregar correos y teléfonos de socios',
-    body: ()=> `<p class="dim small">Pega desde Excel una línea por socio con su <b>nombre</b> y su <b>correo</b> y/o <b>teléfono</b> (en cualquier orden). Se buscan por nombre.</p>
+    body: ()=> `<p class="dim small">Pega desde Excel una línea por socio con su <b>nombre</b> y su <b>correo</b> y/o <b>teléfono</b> (en cualquier orden). Se buscan por nombre.</p>${contactosOk() ? '<button class="btn sm" data-act="contactos" style="margin-bottom:8px">📇 Elegir de mis contactos</button>' : ''}
       <textarea id="pcTxt" style="min-height:150px" placeholder="Pérez Juana&#9;juana@correo.cl"></textarea>
       ${st.res.length ? `<div class="table-wrap" style="margin-top:10px;max-height:32vh;overflow:auto"><table class="t"><tbody>${st.res.map(r=> `<tr><td>${esc(r.nombre)}</td><td>${esc([r.email, r.fono].filter(Boolean).join(' · '))}</td><td>${r.s ? '→ <b>' + esc(r.s.nombre) + '</b>' : '<span class="chip bad">Sin coincidencia</span>'}</td></tr>`).join('')}</tbody></table></div>` : ''}`,
     foot: ()=> `<button class="btn" data-act="close-modal">Cancelar</button><button class="btn primary" id="pcOk" ${st.res.some(r=> r.s) ? '' : 'disabled'}>Guardar ${st.res.filter(r=> r.s).length} correo(s)</button>`,
@@ -3286,6 +3290,46 @@ VIEWS.ajustes.mount = function(v){
   $('#waGuardar', v).onclick = ()=>{ setConfig({ waTexto: t.value.trim() ? t.value : '' }, { noRender: true }); toast('✓ Texto de WhatsApp guardado', 'ok'); };
   $('#waReset', v).onclick = ()=>{ t.value = WA_DEF; setConfig({ waTexto: '' }, { noRender: true }); };
 };
+
+
+/* =====================================================================
+   CONTACTOS DEL CELULAR (Chrome en Android): eliges contactos y la app
+   asigna sus teléfonos a los socios con nombre parecido.
+   ===================================================================== */
+function contactosOk(){ return !!(navigator.contacts && navigator.contacts.select && window.isSecureContext); }
+ACT['contactos'] = async ()=>{
+  if(!contactosOk()){ toast('Tu navegador no permite leer contactos. Funciona en Chrome para Android; en iPhone o computador pega los teléfonos desde Excel.', 'bad', 9000); return; }
+  let cs;
+  try{ cs = await navigator.contacts.select(['name', 'tel'], { multiple: true }); }
+  catch(e){ toast('No se pudo abrir tus contactos.', 'bad'); return; }
+  if(!cs || !cs.length) return;
+  const filas = cs.map(c=>{ const nombre = (c.name && c.name[0]) || ''; const tel = (c.tel || []).find(t=> normFono(t)) || (c.tel || [])[0] || ''; const s = nombre ? matchSocio(nombre) : null; return { nombre, tel, sid: s ? s.id : '' }; }).filter(f=> f.tel);
+  if(!filas.length){ toast('Los contactos elegidos no tienen teléfono.', 'bad'); return; }
+  const socios = sociosOrdenados();
+  openModal({
+    wide: true,
+    title: ()=> 'Teléfonos desde tus contactos',
+    body: ()=> `<p class="dim small">Revisa a qué socio corresponde cada contacto. Puedes cambiarlo en la lista o dejar "No asignar".</p>
+      <div class="table-wrap" style="max-height:52vh;overflow:auto"><table class="t"><tbody>
+      ${filas.map((f, i)=> `<tr><td><b>${esc(f.nombre || '(sin nombre)')}</b><div class="tiny dim">${esc(f.tel)}</div></td><td><select class="ctSel" data-i="${i}"><option value="">— No asignar —</option>${socios.map(s=> `<option value="${s.id}" ${s.id === f.sid ? 'selected' : ''}>${esc(s.nombre)}${s.telefono ? ' (ya tiene ' + esc(s.telefono) + ')' : ''}</option>`).join('')}</select></td></tr>`).join('')}
+      </tbody></table></div>`,
+    foot: ()=> `<button class="btn" data-act="close-modal">Cancelar</button><button class="btn primary" id="ctOk">Guardar teléfonos</button>`,
+    onMount: el=>{
+      $$('.ctSel', el).forEach(sel=> sel.onchange = ()=>{ filas[Number(sel.dataset.i)].sid = sel.value; });
+      $('#ctOk', el).onclick = ()=>{
+        const t0 = now(); let n = 0;
+        filas.filter(f=> f.sid).forEach(f=>{ const s = S.socios.find(x=> x.id === f.sid); if(s){ s.telefono = f.tel.trim(); s.u = t0; n++; } });
+        while(modalStack.length && modalStack[modalStack.length - 1].spec.title() !== '💬 Enviar estado de cuenta por WhatsApp') closeModal();
+        changed(); refreshOpenModal(); modalStack.forEach(x=> x.el._waModal && drawModal(x));
+        toast(`✓ ${n} teléfono(s) guardados`, 'ok');
+      };
+    },
+  });
+};
+/* Botón de contactos en la barra de Socios y en el formulario del socio */
+const _vSoc2 = VIEWS.socios, _mSoc2 = VIEWS.socios.mount;
+VIEWS.socios = function(){ const h = _vSoc2(); return contactosOk() ? h.replace('<button class="btn sm" data-act="whatsapp">', '<button class="btn sm" data-act="contactos">📇 Desde contactos</button><button class="btn sm" data-act="whatsapp">') : h; };
+VIEWS.socios.mount = _mSoc2;
 
 /* =====================================================================
    GOOGLE DRIVE (sincronización con tu cuenta de Google)
