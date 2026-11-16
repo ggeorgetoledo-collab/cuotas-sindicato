@@ -245,25 +245,38 @@ details.adv > summary{ cursor:pointer; color:var(--primary); font-weight:700; pa
 .tk-b{ flex:none; width:38px; height:38px; border-radius:10px; border:1.5px solid var(--border); background:var(--card); color:var(--dim); font-size:1.25rem; line-height:1; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; margin-right:4px; }
 .tk-b.curso{ border-color:var(--info, #1D5A88); color:var(--info, #1D5A88); }
 .tk-b.cumplida{ border-color:var(--ok); background:var(--ok-bg); color:var(--ok); }
+body.en-menu #tabs{ display:none; }
+.tabs button.tab-back{ color:var(--primary-dark); border:1px solid var(--primary-line); margin-right:4px; }
+.hub{ display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:6px; }
+@media (max-width:640px){ .hub{ grid-template-columns:1fr; } }
+.hub-mod{ display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; gap:6px; min-height:260px; padding:28px 20px; background:var(--card); border:1px solid var(--border); border-radius:22px; cursor:pointer; color:var(--text); font:inherit; box-shadow:0 1px 2px rgba(0,0,0,0.04); transition:border-color .15s, background .15s, transform .1s; }
+.hub-mod:hover{ border-color:var(--primary-line); background:var(--primary-light); }
+.hub-mod:active{ transform:scale(0.98); }
+.hub-ico{ font-size:4.2rem; line-height:1; margin-bottom:6px; }
+.hub-t{ font-family:Manrope,sans-serif; font-weight:800; font-size:1.5rem; color:var(--primary-dark); }
+.hub-s{ color:var(--dim); font-size:0.95rem; }
+.hub-k{ margin-top:8px; font-size:0.85rem; font-weight:700; color:var(--text); background:var(--bg); border-radius:999px; padding:5px 12px; }
+@media (max-width:640px){ .hub-mod{ min-height:200px; } .hub-ico{ font-size:3.4rem; } }
 
 </style>
 </head>
 <body>
 <header class="topbar">
   <div class="topbar-in">
-    <div class="brand"><span class="brand-ico" aria-hidden="true">✊</span><span id="brandName">Gestión Sindical</span></div>
+    <div class="brand" data-act="go" data-tab="menu" style="cursor:pointer" title="Volver a los módulos"><span class="brand-ico" aria-hidden="true">✊</span><span id="brandName">Gestión Sindical</span></div>
     <button type="button" class="sync-chip" id="syncChip" data-act="sync-now">Sin conexión</button>
   </div>
   <nav class="tabs" id="tabs">
-    <button type="button" data-tab="inicio">🏠 Inicio</button>
-    <button type="button" data-tab="socios">👥 Socios</button>
-    <button type="button" data-tab="pagos">💵 Pagos</button>
-    <button type="button" data-tab="planes">🤝 Planes de pago</button>
-    <button type="button" data-tab="cuotas">📅 Cobros</button>
-    <button type="button" data-tab="gastos">🧾 Gastos</button>
-    <button type="button" data-tab="ingresos">📈 Ingresos</button>
-    <button type="button" data-tab="actas">📄 Actas</button>
-    <button type="button" data-tab="tareas">✅ Tareas</button>
+    <button type="button" data-tab="menu" class="tab-back">⬅ Módulos</button>
+    <button type="button" data-tab="inicio" data-mod="fin">📊 Resumen</button>
+    <button type="button" data-tab="socios" data-mod="fin">👥 Socios</button>
+    <button type="button" data-tab="pagos" data-mod="fin">💵 Pagos</button>
+    <button type="button" data-tab="planes" data-mod="fin">🤝 Planes de pago</button>
+    <button type="button" data-tab="cuotas" data-mod="fin">📅 Cobros</button>
+    <button type="button" data-tab="gastos" data-mod="fin">🧾 Gastos</button>
+    <button type="button" data-tab="ingresos" data-mod="fin">📈 Ingresos</button>
+    <button type="button" data-tab="actas" data-mod="actas">📄 Actas</button>
+    <button type="button" data-tab="tareas" data-mod="actas">✅ Tareas</button>
     <button type="button" data-tab="portal">🪪 Portal</button>
     <button type="button" data-tab="ajustes">⚙️ Ajustes</button>
   </nav>
@@ -277,7 +290,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 </script>
 <script>
-const APP_VERSION = "20261116134829";
+const APP_VERSION = "20261116135319";
 'use strict';
 /* =====================================================================
    CUOTAS SINDICALES — administración de cuotas y deuda de socios
@@ -1224,6 +1237,48 @@ function openImportar(){
     },
   });
 }
+
+/* =====================================================================
+   MENÚ PRINCIPAL: dos grandes módulos (Finanzas / Actas y acuerdos)
+   ===================================================================== */
+const MOD_INICIO = { fin: 'inicio', actas: 'actas' };
+let currentMod = lsGet('cs_mod', 'fin');
+function modDeTab(t){ const b = document.querySelector('#tabs button[data-tab="' + t + '"]'); return b ? b.dataset.mod || '' : ''; }
+function appSinConfigurar(){ return !S.config.nombre || live('tarifas').length === 0 || live('socios').length === 0; }
+
+VIEWS.menu = function(){
+  if(appSinConfigurar()) return VIEWS.inicio();
+  let finSub = '';
+  try{ const r = resumenGeneral(); finSub = `${r.activos} socios · ${r.conDeuda} con deuda`; }catch(e){}
+  const abiertas = live('tareas').filter(t=> t.estado !== 'cumplida');
+  const vencidas = abiertas.filter(t=> t.plazo && t.plazo < todayISO()).length;
+  const actSub = `${live('actas').length} acta(s) · ${abiertas.length} tarea(s) abierta(s)`;
+  return `<div class="hub">
+    <button type="button" class="hub-mod" data-act="abrir-mod" data-mod="fin">
+      <span class="hub-ico">💰</span><span class="hub-t">Finanzas</span>
+      <span class="hub-s">Cuotas, deudas, pagos, gastos e ingresos</span><span class="hub-k">${esc(finSub)}</span>
+    </button>
+    <button type="button" class="hub-mod" data-act="abrir-mod" data-mod="actas">
+      <span class="hub-ico">📄</span><span class="hub-t">Actas y acuerdos</span>
+      <span class="hub-s">Actas de asamblea, acuerdos y tareas</span><span class="hub-k">${esc(actSub)}${vencidas ? ` · <b style="color:var(--bad)">${vencidas} vencida(s)</b>` : ''}</span>
+    </button>
+  </div>`;
+};
+ACT['abrir-mod'] = el=>{ currentMod = el.dataset.mod; lsSet('cs_mod', currentMod); goTab(MOD_INICIO[currentMod]); };
+
+const _renderViewM = renderView;
+renderView = function(){
+  if(!VIEWS[currentTab]) currentTab = 'menu';
+  const m = modDeTab(currentTab);
+  if(m && m !== currentMod){ currentMod = m; lsSet('cs_mod', m); }
+  const enMenu = currentTab === 'menu' && !appSinConfigurar();
+  document.body.classList.toggle('en-menu', enMenu);
+  $$('#tabs button').forEach(b=>{ b.hidden = !!b.dataset.mod && b.dataset.mod !== currentMod; });
+  _renderViewM();
+};
+
+/* La app siempre parte en el menú de módulos */
+currentTab = 'menu';
 
 /* =====================================================================
    FICHA DEL SOCIO (estado de cuenta)
@@ -2755,7 +2810,7 @@ ACT['borrar-todo'] = async ()=>{
   S.config = Object.assign(emptyState().config, { u: t });
   ['cs_portal_at'].forEach(k=> lsSet(k, null));
   ui.sociosBusca = ''; ui.pagosBusca = '';
-  currentTab = 'inicio';
+  currentTab = 'menu';
   changed();
   toast('✓ Datos borrados. Puedes empezar de nuevo.', 'ok');
 };
@@ -3899,22 +3954,6 @@ function openTareaForm(id, pre){
 }
 ACT['tarea-nueva'] = el=> openTareaForm(null, { actaId: el.dataset.acta || '', acuerdoId: el.dataset.acuerdo || '' });
 ACT['tarea-ver'] = el=> openTareaForm(el.dataset.id);
-
-/* ---------- Inicio: módulos y tareas próximas ---------- */
-MODULOS.splice(MODULOS.findIndex(x=> x[0] === 'portal'), 0,
-  ['actas', '📄', 'Actas', ()=> `${live('actas').length} acta(s)`],
-  ['tareas', '✅', 'Tareas', ()=>{ const v = live('tareas').filter(tareaVencida).length, a = live('tareas').filter(t=> t.estado !== 'cumplida').length; return a + ' abierta(s)' + (v ? ' · ' + v + ' vencida(s)' : ''); }]);
-const _vInicioG = VIEWS.inicio;
-VIEWS.inicio = function(){
-  const h = _vInicioG();
-  if(h.indexOf('class="card welcome"') >= 0) return h;
-  const lim = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10);
-  const prox = live('tareas').filter(t=> t.estado !== 'cumplida' && t.plazo && t.plazo <= lim).sort((a, b)=> a.plazo.localeCompare(b.plazo));
-  if(!prox.length) return h;
-  const card = `<div class="card"><div class="card-head"><h2>Tareas por vencer</h2><button class="btn ghost" data-act="go" data-tab="tareas">Ver todas</button></div>${prox.slice(0, 6).map(tareaRowHtml).join('')}</div>`;
-  const i = h.indexOf('<div class="card"><div class="card-head"><h2>Balance mensual');
-  return i > 0 ? h.slice(0, i) + card + h.slice(i) : h + card;
-};
 
 /* ---------- Portal: contenido común + tareas propias ---------- */
 function comunName(){ return 'comun-' + conn().fileId + '.json'; }
