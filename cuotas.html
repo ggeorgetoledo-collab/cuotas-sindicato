@@ -272,6 +272,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 </script>
 <script>
+const APP_VERSION = "20261116092306";
 'use strict';
 /* =====================================================================
    CUOTAS SINDICALES — administración de cuotas y deuda de socios
@@ -800,7 +801,24 @@ function buildPortalPayload(s){
 }
 let portalTimer = null, portalRunning = null;
 function schedulePortal(){ clearTimeout(portalTimer); portalTimer = setTimeout(()=> publishPortal(false, null, true).catch(()=>{}), 4000); }
+/* Versión de la app: si hay una más nueva publicada, esta pestaña no publica y se actualiza */
+async function versionRemota(){ try{ const r = await fetch('version.json?_=' + Date.now(), { cache: 'no-store' }); if(!r.ok) return null; return (await r.json()).v || null; }catch(e){ return null; } }
+let _avisoVersion = false;
+async function revisarVersion(){
+  if(!/^https?:/.test(location.protocol)) return false;
+  const v = await versionRemota();
+  if(!v || v <= APP_VERSION) return false;
+  const a = document.activeElement;
+  const ocupado = modalStack.length || (a && /INPUT|TEXTAREA|SELECT/.test(a.tagName)) || syncRunning;
+  if(!ocupado){ location.reload(); return true; }
+  if(!_avisoVersion){ _avisoVersion = true; toast('Hay una versión nueva de la app. Se actualizará al cerrar esta ventana, o recarga la página.', '', 12000); }
+  return true;
+}
+setInterval(()=>{ if(document.visibilityState === 'visible') revisarVersion(); }, 5 * 60000);
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState === 'visible') revisarVersion(); });
+setTimeout(revisarVersion, 3000);
 async function publishPortal(force, onProgress, silent){
+  if(await revisarVersion()) throw new Error('Hay una versión nueva de la app: recarga la página y vuelve a publicar.');
   if(!connected()) throw new Error('Primero conecta el repositorio en Ajustes.');
   if(portalRunning) return portalRunning;
   portalRunning = (async ()=>{
