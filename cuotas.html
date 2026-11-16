@@ -3348,6 +3348,82 @@ VIEWS.socios = function(){ const h = _vSoc2(); return contactosOk() ? h.replace(
 VIEWS.socios.mount = _mSoc2;
 
 /* =====================================================================
+   IMPORTAR NÚMEROS DESDE UN CHAT EXPORTADO DE WHATSAPP
+   WhatsApp no deja exportar la lista de participantes, pero sí el chat
+   (Más → Exportar chat → Sin archivos). En ese archivo aparecen los números
+   de quienes no tienes guardados; los guardados aparecen con su nombre.
+   ===================================================================== */
+function parseChatWA(txt){
+  const nums = new Map(), nombres = new Map();
+  const head = /^\[?\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4},?\s+\d{1,2}:\d{2}(?::\d{2})?\s*(?:[ap]\.?\s?m\.?)?\]?\s*(?:-\s*)?([^:]{1,60}):\s/i;
+  const telRe = /\+?\d[\d\s ().-]{7,}\d/g;
+  txt.split(/\r?\n/).forEach(l=>{
+    l = l.replace(/[‎‏‪-‮]/g, '');
+    const m = l.match(head);
+    if(m){
+      const who = m[1].trim().replace(/^~\s*/, '');
+      const t = who.match(telRe);
+      if(t && normFono(t[0])){ const k = normFono(t[0]); nums.set(k, nums.get(k) || { tel: t[0].trim(), n: 0 }); nums.get(k).n++; }
+      else if(who && !/^(tú|tu|you)$/i.test(who)) nombres.set(who, (nombres.get(who) || 0) + 1);
+    } else {
+      (l.match(telRe) || []).forEach(t=>{ const k = normFono(t); if(k && !nums.has(k)) nums.set(k, { tel: t.trim(), n: 0 }); });
+    }
+  });
+  return { nums: Array.from(nums.entries()).map(([k, v])=> ({ k, tel: v.tel, n: v.n })), nombres: Array.from(nombres.entries()).map(([n, c])=> ({ nombre: n, n: c })) };
+}
+function loadJSZip(){
+  if(window.JSZip) return Promise.resolve(window.JSZip);
+  return new Promise((res, rej)=>{ const sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'; sc.onload = ()=> res(window.JSZip); sc.onerror = ()=> rej(new Error('No se pudo abrir el .zip (¿sin internet?).')); document.head.appendChild(sc); });
+}
+ACT['chat-wa'] = ()=>{
+  const st = { res: null };
+  const m = openModal({
+    wide: true,
+    title: ()=> 'Números desde el grupo de WhatsApp',
+    body: ()=>{
+      if(!st.res) return `<p class="small">WhatsApp no permite descargar la lista de integrantes, pero sí <b>exportar el chat</b> del grupo, y ahí vienen los números:</p>
+        <ol class="steps small"><li>En WhatsApp abre el grupo del sindicato → <b>⋮ Más → Exportar chat → Sin archivos</b>.</li><li>Guárdalo en el celular o envíatelo (queda un archivo <b>.txt</b> o <b>.zip</b>).</li><li>Elígelo aquí abajo.</li></ol>
+        <label class="btn primary" style="cursor:pointer;margin-top:8px">📂 Elegir archivo del chat<input type="file" id="cwF" accept=".txt,.zip,text/plain,application/zip" style="display:none"></label>
+        <div class="note small">Solo aparecen los números de quienes <b>no</b> tienes guardados en tus contactos (los guardados salen con su nombre). Para esos usa "📇 Desde contactos". El archivo se lee solo en este equipo; no se sube a ninguna parte.</div>`;
+      const socios = sociosOrdenados();
+      const usados = new Set(live('socios').map(s=> normFono(s.telefono)).filter(Boolean));
+      const nuevos = st.res.nums.filter(x=> !usados.has(x.k));
+      return `<p class="small">Se encontraron <b>${st.res.nums.length}</b> número(s)${st.res.nums.length - nuevos.length ? `, ${st.res.nums.length - nuevos.length} ya asignados a un socio` : ''}. Elige a qué socio corresponde cada uno (si no sabes, abre el chat y busca el número).</p>
+        ${nuevos.length ? `<div class="table-wrap" style="max-height:44vh;overflow:auto"><table class="t"><tbody>${nuevos.map((x, i)=> `<tr><td><b>${esc(x.tel)}</b><div class="tiny dim">${x.n ? x.n + ' mensaje(s)' : 'aparece en avisos del grupo'}</div></td><td><select class="cwSel" data-k="${x.k}" data-tel="${esc(x.tel)}"><option value="">— No asignar —</option>${socios.filter(s=> !normFono(s.telefono)).map(s=> `<option value="${s.id}">${esc(s.nombre)}</option>`).join('')}</select></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">No hay números nuevos para asignar.</div>'}
+        ${st.res.nombres.length ? `<details class="adv"><summary>Integrantes guardados con nombre (${st.res.nombres.length})</summary><p class="dim tiny">Estos no traen número en el chat. Usa "📇 Desde contactos" para cargarlos.</p><div class="small">${st.res.nombres.map(x=> esc(x.nombre)).join(' · ')}</div></details>` : ''}`;
+    },
+    foot: ()=> `<button class="btn" data-act="close-modal">${st.res ? 'Cancelar' : 'Cerrar'}</button>${st.res ? '<button class="btn primary" id="cwOk">Guardar teléfonos</button>' : ''}`,
+    onMount: el=>{
+      const f = $('#cwF', el);
+      if(f) f.onchange = async ()=>{
+        const file = f.files[0]; if(!file) return;
+        try{
+          let txt;
+          if(/\.zip$/i.test(file.name) || file.type.includes('zip')){
+            const Z = await loadJSZip(); const z = await Z.loadAsync(file);
+            const ent = Object.values(z.files).find(e=> /\.txt$/i.test(e.name));
+            if(!ent) throw new Error('El .zip no trae el chat (.txt).');
+            txt = await ent.async('string');
+          } else txt = await file.text();
+          st.res = parseChatWA(txt);
+          if(!st.res.nums.length && !st.res.nombres.length) throw new Error('No se reconoció el formato del chat.');
+          drawModal(m);
+        }catch(e){ toast('⚠ ' + e.message, 'bad'); }
+      };
+      const ok = $('#cwOk', el);
+      if(ok) ok.onclick = ()=>{
+        const t0 = now(); let n = 0; const dup = new Set();
+        $$('.cwSel', el).forEach(sel=>{ if(!sel.value || dup.has(sel.value)) return; dup.add(sel.value); const s = S.socios.find(x=> x.id === sel.value); if(s){ s.telefono = sel.dataset.tel; s.u = t0; n++; } });
+        closeModal(); changed(); refreshOpenModal(); toast(`✓ ${n} teléfono(s) guardados`, 'ok');
+      };
+    },
+  });
+};
+const _vSoc3 = VIEWS.socios, _mSoc3 = VIEWS.socios.mount;
+VIEWS.socios = function(){ return _vSoc3().replace('<button class="btn sm" data-act="whatsapp">', '<button class="btn sm" data-act="chat-wa">👥 Desde grupo de WhatsApp</button><button class="btn sm" data-act="whatsapp">'); };
+VIEWS.socios.mount = _mSoc3;
+
+/* =====================================================================
    GOOGLE DRIVE (sincronización con tu cuenta de Google)
    Guarda una copia de los datos en la carpeta privada de la app dentro de
    tu Google Drive (no se ve en "Mi unidad" y nadie más puede leerla).
