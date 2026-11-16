@@ -3303,15 +3303,15 @@ ACT['contactos'] = async ()=>{
   try{ cs = await navigator.contacts.select(['name', 'tel'], { multiple: true }); }
   catch(e){ toast('No se pudo abrir tus contactos.', 'bad'); return; }
   if(!cs || !cs.length) return;
-  const filas = cs.map(c=>{ const nombre = (c.name && c.name[0]) || ''; const tel = (c.tel || []).find(t=> normFono(t)) || (c.tel || [])[0] || ''; const s = nombre ? matchSocio(nombre) : null; return { nombre, tel, sid: s ? s.id : '' }; }).filter(f=> f.tel);
-  if(!filas.length){ toast('Los contactos elegidos no tienen teléfono.', 'bad'); return; }
+  const filas = cs.map(c=>{ const nombre = (c.name && c.name[0]) || ''; const tel = (c.tel || []).find(t=> normFono(t)) || (c.tel || [])[0] || ''; const s = nombre ? matchSocio(nombre) : null; return { nombre, tel, sid: s && tel ? s.id : '' }; });
   const socios = sociosOrdenados();
   openModal({
     wide: true,
     title: ()=> 'Teléfonos desde tus contactos',
-    body: ()=> `<p class="dim small">Revisa a qué socio corresponde cada contacto. Puedes cambiarlo en la lista o dejar "No asignar".</p>
+    body: ()=> `<p class="dim small">Elegiste <b>${filas.length}</b> contacto(s). Revisa a qué socio corresponde cada uno; puedes cambiarlo en la lista o dejar "No asignar".</p>
+      ${filas.some(f=> !f.tel) ? `<div class="note warn small">${filas.filter(f=> !f.tel).length} contacto(s) llegaron sin teléfono (el celular no lo entregó). Agrégalo a mano en "Editar datos" del socio.</div>` : ''}
       <div class="table-wrap" style="max-height:52vh;overflow:auto"><table class="t"><tbody>
-      ${filas.map((f, i)=> `<tr><td><b>${esc(f.nombre || '(sin nombre)')}</b><div class="tiny dim">${esc(f.tel)}</div></td><td><select class="ctSel" data-i="${i}"><option value="">— No asignar —</option>${socios.map(s=> `<option value="${s.id}" ${s.id === f.sid ? 'selected' : ''}>${esc(s.nombre)}${s.telefono ? ' (ya tiene ' + esc(s.telefono) + ')' : ''}</option>`).join('')}</select></td></tr>`).join('')}
+      ${filas.map((f, i)=> `<tr><td><b>${esc(f.nombre || '(sin nombre)')}</b><div class="tiny ${f.tel ? 'dim' : ''}" style="${f.tel ? '' : 'color:var(--bad)'}">${f.tel ? esc(f.tel) : 'Sin teléfono'}</div></td><td><select class="ctSel" data-i="${i}" ${f.tel ? '' : 'disabled'}><option value="">— No asignar —</option>${socios.map(s=> `<option value="${s.id}" ${s.id === f.sid ? 'selected' : ''}>${esc(s.nombre)}${s.telefono ? ' (ya tiene ' + esc(s.telefono) + ')' : ''}</option>`).join('')}</select></td></tr>`).join('')}
       </tbody></table></div>`,
     foot: ()=> `<button class="btn" data-act="close-modal">Cancelar</button><button class="btn primary" id="ctOk">Guardar teléfonos</button>`,
     onMount: el=>{
