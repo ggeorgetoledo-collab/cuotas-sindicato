@@ -298,7 +298,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 </script>
 <script>
-const APP_VERSION = "20261116143620";
+const APP_VERSION = "20261116145432";
 'use strict';
 /* =====================================================================
    CUOTAS SINDICALES — administración de cuotas y deuda de socios
@@ -353,7 +353,7 @@ function rutValido(r){
 /* ---------- Estado ----------
    Cada registro lleva id, u (última modificación, ms) y del (borrado lógico).
    Así los cambios de varios dirigentes se combinan registro por registro sin pisarse. */
-const COLS = ['tarifas', 'socios', 'pagos', 'cobros', 'ajustes', 'planes', 'autoriz', 'acuerdos', 'nominas', 'gastos', 'ingresos', 'correos', 'actas', 'tareas', 'avisos', 'propuestas'];
+const COLS = ['tarifas', 'socios', 'pagos', 'cobros', 'ajustes', 'planes', 'autoriz', 'acuerdos', 'nominas', 'gastos', 'ingresos', 'correos', 'actas', 'tareas', 'avisos', 'propuestas', 'drivedocs'];
 const MEDIOS = ['Efectivo', 'Transferencia', 'Descuento por planilla', 'Depósito', 'Otro'];
 function emptyState(){
   const e = { v: 1, config: { nombre: '', diaVencimiento: 10, mesInicioDefault: curYm(), portalAuto: true, u: 0 } };
@@ -4643,6 +4643,238 @@ setInterval(()=>{ if(document.visibilityState === 'visible' && gdEnabled() && gd
 if(navigator.onLine) setTimeout(()=> gdLoadGis().catch(()=>{}), 300);
 window.addEventListener('online', ()=> gdLoadGis().catch(()=>{}));
 renderView();
+
+/* =====================================================================
+   CARPETA DEL SINDICATO EN GOOGLE DRIVE
+   Sube automáticamente a una carpeta normal de "Mi unidad" (que el dueño
+   puede compartir con la directiva):
+     · Actas: el acta en Word y sus archivos adjuntos (PDF, fotos)
+     · Planillas de abonos: el Word para firmas
+     · Respaldos: una vez al día, Excel (cuotas, socios, gastos, ingresos)
+       y el respaldo completo (.json)
+   Sube el equipo de quien conectó la carpeta. Google entrega permisos por
+   1 hora: si vencen, basta un toque en "Subir a Drive".
+   ===================================================================== */
+const DR_SCOPE = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email';
+const DR_SUB = { actas: 'Actas', planillas: 'Planillas de abonos', respaldos: 'Respaldos' };
+const DR_DIAS = 30;
+['dr-abrir', 'dr-subir'].forEach(a=> ACT_LIBRES.add(a));
+function drCfg(){ const c = S.config.carpeta; return c && c.id ? c : null; }
+function drTok(){ try{ return JSON.parse(lsGet('cs_dr_tok', 'null') || 'null'); }catch(e){ return null; } }
+function drTokOk(){ const t = drTok(); return !!(t && t.access_token && Date.now() < t.expires_at - 60000); }
+function drEmail(){ return lsGet('cs_dr_email', ''); }
+function drEsDueno(){ const c = drCfg(); return !!(c && drEmail() && drEmail() === c.email); }
+let drEstado = { st: '', msg: '', n: 0, hecho: 0, total: 0, at: Number(lsGet('cs_dr_at', '0')) || 0 };
+let drCorriendo = null, drTimer = null;
+
+function drLogin(){
+  if(!(window.google && google.accounts && google.accounts.oauth2)){ gdLoadGis().catch(()=>{}); return Promise.reject(new Error('Cargando Google… espera 2 segundos y toca de nuevo.')); }
+  return new Promise((resolve, reject)=>{
+    google.accounts.oauth2.initTokenClient({
+      client_id: gdClientId(), scope: DR_SCOPE,
+      callback: async resp=>{
+        if(resp.error){ reject(new Error(resp.error_description || resp.error)); return; }
+        lsSet('cs_dr_tok', JSON.stringify({ access_token: resp.access_token, expires_at: Date.now() + (Number(resp.expires_in) || 3600) * 1000 }));
+        try{ const u = await (await fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers: { Authorization: 'Bearer ' + resp.access_token } })).json(); if(u.email) lsSet('cs_dr_email', u.email.toLowerCase()); }catch(e){}
+        resolve();
+      },
+      error_callback: err=> reject(new Error(err && err.type === 'popup_closed' ? 'Se cerró la ventana de Google.' : 'No se pudo abrir la ventana de Google.')),
+    }).requestAccessToken({ prompt: drEmail() ? '' : 'consent', login_hint: drEmail() || undefined });
+  });
+}
+async function drFetch(url, opts){
+  const t = drTok();
+  const res = await fetch(url, Object.assign({}, opts || {}, { headers: Object.assign({ Authorization: 'Bearer ' + (t && t.access_token) }, (opts && opts.headers) || {}) }));
+  if(res.status === 401){ lsSet('cs_dr_tok', null); throw Object.assign(new Error('El permiso de Google venció.'), { auth: true }); }
+  if(!res.ok){ let m = ''; try{ m = (await res.json()).error.message; }catch(e){} throw Object.assign(new Error('Google Drive (' + res.status + ')' + (m ? ': ' + m : '')), { status: res.status }); }
+  return res;
+}
+async function drCrearCarpeta(nombre, padre){
+  const r = await drFetch('https://www.googleapis.com/drive/v3/files?fields=id,webViewLink', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: nombre, mimeType: 'application/vnd.google-apps.folder', parents: padre ? [padre] : undefined }) });
+  return r.json();
+}
+async function drSubir(blob, nombre, padre, fid){
+  if(fid){
+    try{
+      await drFetch(`https://www.googleapis.com/upload/drive/v3/files/${fid}?uploadType=media`, { method: 'PATCH', headers: { 'Content-Type': blob.type || 'application/octet-stream' }, body: blob });
+      await drFetch(`https://www.googleapis.com/drive/v3/files/${fid}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: nombre }) });
+      return fid;
+    }catch(e){ if(e.status !== 404) throw e; }
+  }
+  const b = 'cs' + Math.random().toString(36).slice(2);
+  const meta = JSON.stringify({ name: nombre, parents: [padre] });
+  const body = new Blob([`--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n--${b}\r\nContent-Type: ${blob.type || 'application/octet-stream'}\r\n\r\n`, blob, `\r\n--${b}--`]);
+  const r = await drFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', { method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + b }, body });
+  return (await r.json()).id;
+}
+async function drPapelera(fid){ try{ await drFetch(`https://www.googleapis.com/drive/v3/files/${fid}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ trashed: true }) }); }catch(e){ if(e.status !== 404) throw e; } }
+
+/* Registro de lo ya subido (viaja con los datos para no duplicar) */
+function drDoc(k){ return S.drivedocs.find(x=> x.id === k && !x.del) || null; }
+function drMarcar(k, fid, sig, extra){
+  const i = S.drivedocs.findIndex(x=> x.id === k);
+  const rec = Object.assign({ id: k, fid, sig, t: todayISO(), u: now() }, extra || {});
+  if(i >= 0) S.drivedocs[i] = rec; else S.drivedocs.push(rec);
+  saveLocal(); lsSet('cs_dirty', '1'); scheduleSync();
+}
+function drBorrarMarca(k){ const x = S.drivedocs.find(r=> r.id === k); if(x){ x.del = true; x.u = now(); saveLocal(); lsSet('cs_dirty', '1'); scheduleSync(); } }
+
+/* Toma lo que la app normalmente "descarga" y lo entrega como archivo */
+async function capturar(fn){
+  const out = [];
+  const XL = await loadXLSX().catch(()=> window.XLSX);
+  const click0 = HTMLAnchorElement.prototype.click, wf0 = XL && XL.writeFile;
+  HTMLAnchorElement.prototype.click = function(){
+    if(this.download && /^blob:/.test(this.href)){ const n = this.download, h = this.href; out.push(fetch(h).then(r=> r.blob()).then(b=> ({ name: n, blob: b }))); }
+    else click0.call(this);
+  };
+  if(XL) XL.writeFile = (wb, name)=>{ out.push(Promise.resolve({ name, blob: new Blob([XL.write(wb, { bookType: 'xlsx', type: 'array' })], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }) })); };
+  try{ await fn(); }
+  finally{ HTMLAnchorElement.prototype.click = click0; if(XL) XL.writeFile = wf0; }
+  return Promise.all(out);
+}
+const limpio = s=> String(s || '').replace(/[\\/:*?"<>|#]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 90);
+
+/* ---------- Qué falta subir ---------- */
+function drPendientes(){
+  const c = drCfg(); if(!c) return [];
+  const p = [];
+  live('actas').forEach(a=>{
+    const base = limpio(`${a.fecha} ${a.titulo || a.tipo}`);
+    const d = drDoc('acta:' + a.id); if(!d || d.sig !== String(a.u)) p.push({ k: 'acta:' + a.id, sig: String(a.u), tipo: 'acta', a, nombre: base + '.docx', fid: d && d.fid });
+    (a.archivos || []).forEach(f=>{ const dk = 'arch:' + f.id; const n = limpio(base + ' - ' + f.nombre); const dd = drDoc(dk); if(!dd || dd.n !== n) p.push({ k: dk, sig: '1', tipo: 'arch', a, f, nombre: n, fid: dd && dd.fid }); });
+  });
+  const vivos = new Set(live('actas').flatMap(a=> ['acta:' + a.id].concat((a.archivos || []).map(f=> 'arch:' + f.id))));
+  S.drivedocs.filter(x=> !x.del && /^(acta|arch):/.test(x.id) && !vivos.has(x.id)).forEach(x=> p.push({ k: x.id, tipo: 'borrar', fid: x.fid }));
+  live('nominas').forEach(nm=>{ const d = drDoc('nom:' + nm.id); if(!d || d.sig !== String(nm.u)) p.push({ k: 'nom:' + nm.id, sig: String(nm.u), tipo: 'nomina', nm, fid: d && d.fid }); });
+  if(!drDoc('resp:' + todayISO())) p.push({ k: 'resp:' + todayISO(), tipo: 'respaldo' });
+  return p;
+}
+
+/* ---------- Subir ---------- */
+async function drEjecutar(manual){
+  if(drCorriendo) return drCorriendo;
+  const c = drCfg(); if(!c || !drEsDueno()) return;
+  if(!drTokOk()){ drEstado.st = 'auth'; drPintar(); return; }
+  drCorriendo = (async ()=>{
+    const lista = drPendientes();
+    drEstado = Object.assign(drEstado, { st: 'busy', total: lista.length, hecho: 0, msg: '' }); drPintar();
+    let err = 0;
+    for(const it of lista){
+      try{
+        if(it.tipo === 'acta'){
+          const [f] = await capturar(()=> ACT['acta-word']({ dataset: { id: it.a.id } }));
+          if(f){ const fid = await drSubir(f.blob, it.nombre, c.sub.actas, it.fid); drMarcar(it.k, fid, it.sig); }
+        } else if(it.tipo === 'arch'){
+          const blob = await bajarArchivo(it.f);
+          const fid = await drSubir(blob, it.nombre, c.sub.actas, it.fid); drMarcar(it.k, fid, '1', { n: it.nombre });
+        } else if(it.tipo === 'borrar'){
+          await drPapelera(it.fid); drBorrarMarca(it.k);
+        } else if(it.tipo === 'nomina'){
+          const [f] = await capturar(()=> nominaWord(it.nm));
+          if(f){ const fid = await drSubir(f.blob, limpio(f.name.replace(/\.docx$/, '')) + '.docx', c.sub.planillas, it.fid); drMarcar(it.k, fid, it.sig); }
+        } else if(it.tipo === 'respaldo'){
+          await drRespaldo(c);
+        }
+      }catch(e){
+        if(e.auth){ drEstado.st = 'auth'; drPintar(); drCorriendo = null; return; }
+        err++; drEstado.msg = e.message || String(e);
+      }
+      drEstado.hecho++; drPintar();
+    }
+    drEstado.st = err ? 'error' : 'ok'; drEstado.at = now(); lsSet('cs_dr_at', String(drEstado.at));
+    drPintar();
+    if(manual) toast(err ? `⚠ ${err} documento(s) no se pudieron subir: ${drEstado.msg}` : `✓ Carpeta de Drive al día${lista.length ? ' (' + lista.length + ' documento(s))' : ''}`, err ? 'bad' : 'ok', 8000);
+  })();
+  try{ await drCorriendo; } finally { drCorriendo = null; }
+}
+async function drRespaldo(c){
+  const hoy = todayISO();
+  const anio = String(new Date().getFullYear()), fa = ui.finAnio;
+  const archivos = await capturar(async ()=>{
+    ACT['respaldo']();
+    await ACT['excel']();
+    await ACT['excel-socios']();
+    ui.finAnio = anio;
+    try{ await ACT['mv-excel']({ dataset: { col: 'gastos' } }); await ACT['mv-excel']({ dataset: { col: 'ingresos' } }); } finally { ui.finAnio = fa; }
+  });
+  const sub = await drCrearCarpeta('Respaldo ' + hoy, c.sub.respaldos);
+  for(const f of archivos) await drSubir(f.blob, f.name, sub.id);
+  drMarcar('resp:' + hoy, sub.id, '1');
+  // conserva los últimos 30 días y el primer respaldo de cada mes
+  const lim = new Date(Date.now() - DR_DIAS * 86400000).toISOString().slice(0, 10);
+  const resp = S.drivedocs.filter(x=> !x.del && /^resp:/.test(x.id)).sort((a, b)=> a.id.localeCompare(b.id));
+  const primeros = new Set(); const vistos = new Set();
+  resp.forEach(x=>{ const m = x.id.slice(5, 12); if(!vistos.has(m)){ vistos.add(m); primeros.add(x.id); } });
+  for(const x of resp){ if(x.id.slice(5) < lim && !primeros.has(x.id)){ try{ await drPapelera(x.fid); drBorrarMarca(x.id); }catch(e){} } }
+}
+function drProgramar(ms){ clearTimeout(drTimer); if(!drCfg() || !drEsDueno() || !drTokOk()) return; drTimer = setTimeout(()=> drEjecutar(false), ms == null ? 15000 : ms); }
+
+/* ---------- Conectar ---------- */
+ACT['dr-conectar'] = async ()=>{
+  try{ await drLogin(); }catch(e){ toast('⚠ ' + e.message, 'bad'); return; }
+  try{
+    const raiz = await drCrearCarpeta('Gestión Sindical · ' + (S.config.nombre || 'Sindicato'));
+    const sub = {};
+    for(const [k, n] of Object.entries(DR_SUB)) sub[k] = (await drCrearCarpeta(n, raiz.id)).id;
+    S.drivedocs.forEach(x=>{ if(!x.del){ x.del = true; x.u = now(); } });
+    setConfig({ carpeta: { id: raiz.id, url: raiz.webViewLink || ('https://drive.google.com/drive/folders/' + raiz.id), email: drEmail(), sub } });
+    toast('✓ Carpeta creada en tu Google Drive. Subiendo documentos…', 'ok', 8000);
+    drEjecutar(true);
+  }catch(e){ toast('⚠ ' + e.message, 'bad'); }
+};
+ACT['dr-subir'] = async ()=>{
+  if(!drEsDueno()){ toast('Los documentos se suben desde el equipo de ' + (drCfg() ? drCfg().email : 'quien conectó la carpeta') + '.', 'bad', 8000); return; }
+  if(!drTokOk()){ try{ await drLogin(); }catch(e){ toast('⚠ ' + e.message, 'bad'); return; } }
+  if(drEmail() !== drCfg().email){ toast(`Entraste con ${drEmail()}, pero la carpeta es de ${drCfg().email}.`, 'bad', 8000); return; }
+  drEjecutar(true);
+};
+ACT['dr-abrir', 'dr-subir'] = ()=>{ const c = drCfg(); if(c) window.open(c.url, '_blank'); };
+ACT['dr-quitar'] = async ()=>{ if(!await confirmar('¿Dejar de subir documentos a la carpeta? La carpeta y lo que ya se subió quedan en Drive.', 'Dejar de subir', true)) return; setConfig({ carpeta: null }); };
+
+/* ---------- Indicador y tarjeta en Ajustes ---------- */
+function drPintar(){
+  const box = $('#drBox'); if(box) box.innerHTML = drEstadoHtml();
+  let ch = $('#drChip');
+  const pend = drCfg() && drEsDueno() ? drPendientes().length : 0;
+  const ver = drCfg() && drEsDueno() && (drEstado.st === 'busy' || (pend && !drTokOk()) || drEstado.st === 'error');
+  if(!ver){ if(ch) ch.remove(); return; }
+  if(!ch){ ch = document.createElement('button'); ch.type = 'button'; ch.id = 'drChip'; ch.className = 'sync-chip'; ch.dataset.act = 'dr-subir'; const sc = $('#syncChip'); sc.parentNode.insertBefore(ch, sc); }
+  ch.className = 'sync-chip' + (drEstado.st === 'busy' ? ' busy' : drEstado.st === 'error' ? ' bad' : '');
+  ch.textContent = drEstado.st === 'busy' ? `📁 ${drEstado.hecho}/${drEstado.total}` : drEstado.st === 'error' ? '📁 ⚠ Drive' : `📁 Subir ${pend}`;
+  ch.title = drEstado.st === 'busy' ? 'Subiendo documentos a la carpeta de Drive' : 'Documentos por subir a la carpeta de Drive';
+}
+function drEstadoHtml(){
+  const c = drCfg(); if(!c) return '';
+  if(!drEsDueno()) return `<div class="note small">Los documentos se suben automáticamente desde el equipo de <b>${esc(c.email)}</b>.</div>`;
+  const pend = drPendientes().length;
+  if(drEstado.st === 'busy') return `<div class="note small">⟳ Subiendo ${drEstado.hecho} de ${drEstado.total}…</div>`;
+  return `<div class="note ${drEstado.st === 'error' ? 'bad' : pend && !drTokOk() ? 'warn' : 'ok'} small">${drEstado.st === 'error' ? '⚠ ' + esc(drEstado.msg) + '<br>' : ''}${pend ? `${pend} documento(s) por subir.${drTokOk() ? '' : ' El permiso de Google dura 1 hora: toca "Subir ahora".'}` : '✓ Todo subido.'}${drEstado.at ? ' Última subida: ' + fdatetime(drEstado.at) + '.' : ''}</div>`;
+}
+function carpetaCardHtml(){
+  const c = drCfg();
+  if(!c) return `<div class="card"><h2>📁 Carpeta del sindicato en Google Drive</h2>
+    <p class="dim small">Crea una carpeta en <b>tu</b> Google Drive ("Mi unidad") donde la app sube sola: las <b>actas</b> en Word con sus PDF y fotos, las <b>planillas de abonos</b>, y un <b>respaldo diario</b> en Excel y completo. Después la compartes con la directiva desde Drive.</p>
+    <div class="btn-row"><button class="btn primary" data-act="dr-conectar">📁 Crear carpeta y conectar</button></div></div>`;
+  return `<div class="card"><h2>📁 Carpeta del sindicato en Google Drive</h2>
+    <p class="small">Carpeta de <b>${esc(c.email)}</b>: <i>Actas</i>, <i>Planillas de abonos</i> y <i>Respaldos</i> (uno por día; se guardan 30 días y el primero de cada mes).</p>
+    <div id="drBox">${drEstadoHtml()}</div>
+    <div class="btn-row"><button class="btn" data-act="dr-abrir">📂 Abrir carpeta</button>${drEsDueno() || !drEmail() ? '<button class="btn primary" data-act="dr-subir">⟳ Subir ahora</button>' : ''}</div>
+    <p class="dim tiny" style="margin-top:8px">Para compartirla: ábrela, toca <b>Compartir</b> y agrega los correos de la directiva como <b>Lectores</b> (o Editores). El respaldo completo (.json) no va cifrado: compártela solo con la directiva.</p>
+    ${drEsDueno() ? '<details class="adv"><summary>Más opciones</summary><button class="btn sm danger" data-act="dr-quitar">Dejar de subir a esta carpeta</button></details>' : ''}
+  </div>`;
+}
+const _vAjDr = VIEWS.ajustes, _mAjDr = VIEWS.ajustes.mount;
+VIEWS.ajustes = function(){ const h = _vAjDr(); const i = h.indexOf('<div class="card">', 10); return i > 0 ? h.slice(0, i) + carpetaCardHtml() + h.slice(i) : h + carpetaCardHtml(); };
+VIEWS.ajustes.mount = _mAjDr;
+const _renderDr = renderView;
+renderView = function(){ _renderDr(); drPintar(); };
+
+/* Automático: al abrir la app, tras cada cambio y cada 10 minutos (si el permiso de Google sigue vigente) */
+const _schedDr = scheduleSync;
+scheduleSync = function(d){ _schedDr(d); drProgramar(); };
+setTimeout(()=>{ drPintar(); drProgramar(4000); }, 2000);
+setInterval(()=>{ if(document.visibilityState === 'visible') drProgramar(1000); }, 600000);
 
 </script>
 </body>
