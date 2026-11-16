@@ -912,7 +912,7 @@ document.addEventListener('keydown', e=>{ if(e.key === 'Escape' && modalStack.le
 /* ---------- Navegación ---------- */
 let currentTab = lsGet('cs_tab', 'inicio');
 const VIEWS = {};
-const ui = { sociosFiltro: 'todos', sociosBusca: '', pagosMes: 'todos', pagosBusca: '' };
+const ui = { sociosContacto: 'todos', sociosFiltro: 'todos', sociosBusca: '', pagosMes: 'todos', pagosBusca: '' };
 function goTab(t){ currentTab = VIEWS[t] ? t : 'inicio'; lsSet('cs_tab', currentTab); renderView(); window.scrollTo(0, 0); }
 function renderView(){
   if(!VIEWS[currentTab]) currentTab = 'inicio';
@@ -1015,6 +1015,19 @@ ACT['welcome-save'] = ()=>{
   else setConfig({ nombre, diaVencimiento: dia });
   toast('✓ Datos guardados. Ahora agrega a los socios.', 'ok');
 };
+function tieneMail(s){ return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(s.email || '').trim()); }
+function tieneFono(s){ return String(s.telefono || '').replace(/\D/g, '').length >= 8; }
+function contactoOk(s, k){
+  switch(k){
+    case 'conMail': return tieneMail(s);
+    case 'sinMail': return !tieneMail(s);
+    case 'conFono': return tieneFono(s);
+    case 'sinFono': return !tieneFono(s);
+    case 'ambos': return tieneMail(s) && tieneFono(s);
+    case 'ninguno': return !tieneMail(s) && !tieneFono(s);
+    default: return true;
+  }
+}
 ACT['ver-deudores'] = ()=>{ ui.sociosFiltro = 'deuda'; goTab('socios'); };
 
 /* =====================================================================
@@ -1030,7 +1043,8 @@ VIEWS.socios = function(){
     if(f === 'suspendidos' && !socioSuspendido(s)) return false;
     if(f === 'deuda' && c.deuda <= 0) return false;
     if(f === 'aldia' && c.deuda > 0) return false;
-    if(q && !normTxt(s.nombre + ' ' + (s.rut || '') + ' ' + formatRut(s.rut)).includes(q)) return false;
+    if(!contactoOk(s, ui.sociosContacto)) return false;
+    if(q && !normTxt(s.nombre + ' ' + (s.rut || '') + ' ' + formatRut(s.rut) + ' ' + (s.email || '') + ' ' + (s.telefono || '')).includes(q)) return false;
     return true;
   });
   if(f === 'deuda') rows.sort((a, b)=> b.c.deuda - a.c.deuda);
@@ -1040,10 +1054,11 @@ VIEWS.socios = function(){
     <div class="card-head"><h2>Socios (${all.filter(x=> !socioBaja(x)).length} activos)</h2>
       <div class="btn-row"><button class="btn primary sm" data-act="nuevo-socio">+ Socio</button><button class="btn sm" data-act="importar-socios">📋 Pegar lista</button></div></div>
     <div class="toolbar">
-      <input type="search" id="sBusca" placeholder="Buscar por nombre o RUT…" value="${esc(ui.sociosBusca)}">
+      <input type="search" id="sBusca" placeholder="Buscar por nombre, RUT, correo o teléfono…" value="${esc(ui.sociosBusca)}">
       <div class="seg" id="sFiltro">
         ${[['todos', 'Activos'], ['deuda', 'Con deuda'], ['aldia', 'Al día'], ['suspendidos', 'Suspendidos'], ['retirados', 'Dados de baja']].map(([k, l])=> `<button type="button" data-f="${k}" class="${f === k ? 'active' : ''}">${l} (${cnt(k)})</button>`).join('')}
       </div>
+      <select id="sContacto" title="Filtrar por datos de contacto">${[['todos', 'Correo y teléfono: todos'], ['conMail', '✉️ Con correo'], ['sinMail', '✉️ Sin correo'], ['conFono', '📱 Con teléfono'], ['sinFono', '📱 Sin teléfono'], ['ambos', 'Con correo y teléfono'], ['ninguno', 'Sin correo ni teléfono']].map(([k, l])=> `<option value="${k}" ${ui.sociosContacto === k ? 'selected' : ''}>${l}${k === 'todos' ? '' : ' (' + all.filter(x=> (f === 'retirados' ? socioBaja(x) : !socioBaja(x)) && contactoOk(x, k)).length + ')'}</option>`).join('')}</select>
     </div>
     ${(f === 'retirados' || f === 'deuda') && rows.some(r=> r.c.deuda > 0) ? `<div class="toolbar"><button class="btn sm danger" data-act="condonar-varios" data-ids="${rows.filter(r=> r.c.deuda > 0).map(r=> r.s.id).join(',')}">🧽 Borrar deuda de esta lista (${rows.filter(r=> r.c.deuda > 0).length})</button></div>` : ''}
     <div id="sLista">${sociosRows(rows)}</div>
@@ -1054,7 +1069,7 @@ function sociosRows(rows){
   return rows.map(({ s, c })=> `
     <div class="row click" data-act="ficha" data-id="${s.id}">
       <div class="main"><div class="title">${nombreHtml(s)}</div>
-        <div class="sub">${s.rut ? esc(formatRut(s.rut)) + ' · ' : ''}socio desde ${esc(mesLabel(socioInicio(s), true))}${s.mesTermino ? ' · de baja desde ' + esc(mesLabel(idxToYm(ymToIdx(s.mesTermino) + 1), true)) : ''}${socioSuspendido(s) && !s.mesTermino ? ' · suspendido desde ' + esc(mesLabel(s.suspDesde, true)) + (s.suspHasta ? ' hasta ' + esc(mesLabel(s.suspHasta, true)) : '') : ''}${c.mesesAdeudados.length ? ' · <b>' + c.mesesAdeudados.length + (c.mesesAdeudados.length === 1 ? ' mes' : ' meses') + ' adeudado' + (c.mesesAdeudados.length === 1 ? '' : 's') + '</b>' : ''}</div></div>
+        <div class="sub">${tieneMail(s) || tieneFono(s) ? `<span title="${esc([s.email, s.telefono].filter(Boolean).join(' · '))}">${tieneMail(s) ? '✉️' : ''}${tieneFono(s) ? '📱' : ''}</span> · ` : ''}${s.rut ? esc(formatRut(s.rut)) + ' · ' : ''}socio desde ${esc(mesLabel(socioInicio(s), true))}${s.mesTermino ? ' · de baja desde ' + esc(mesLabel(idxToYm(ymToIdx(s.mesTermino) + 1), true)) : ''}${socioSuspendido(s) && !s.mesTermino ? ' · suspendido desde ' + esc(mesLabel(s.suspDesde, true)) + (s.suspHasta ? ' hasta ' + esc(mesLabel(s.suspHasta, true)) : '') : ''}${c.mesesAdeudados.length ? ' · <b>' + c.mesesAdeudados.length + (c.mesesAdeudados.length === 1 ? ' mes' : ' meses') + ' adeudado' + (c.mesesAdeudados.length === 1 ? '' : 's') + '</b>' : ''}</div></div>
       ${chipDeuda(c)}
     </div>`).join('');
 }
@@ -1066,6 +1081,7 @@ VIEWS.socios.mount = function(v){
     renderView();
     const n = $('#sBusca'); n.focus(); try{ n.setSelectionRange(pos, pos); }catch(e){}
   });
+  $('#sContacto', v).onchange = e=>{ ui.sociosContacto = e.target.value; renderView(); };
   $('#sFiltro', v).addEventListener('click', e=>{ const b = e.target.closest('button[data-f]'); if(b){ ui.sociosFiltro = b.dataset.f; renderView(); } });
 };
 
