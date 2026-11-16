@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#2E7553">
-<title>Mis cuotas</title>
+<title>Portal del socio · Gestión Sindical</title>
 <link rel="icon" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=Source+Sans+3:wght@400;600;700&display=swap">
@@ -80,6 +80,15 @@
   .err{ color:var(--bad); font-weight:700; min-height:1.4em; margin-top:8px; }
   .note{ font-size:0.8rem; color:var(--dim); text-align:center; margin-top:18px; line-height:1.5; }
   .actions{ display:flex; justify-content:center; gap:8px; flex-wrap:wrap; margin-top:16px; }
+  .ptabs{ display:flex; gap:6px; margin:0 0 14px; overflow-x:auto; }
+  .ptabs button{ flex:1; font:inherit; font-weight:800; font-size:0.9rem; padding:10px 8px; border-radius:12px; border:1px solid var(--border); background:var(--card); color:var(--dim); cursor:pointer; white-space:nowrap; }
+  .ptabs button.on{ background:var(--primary); border-color:var(--primary); color:#fff; }
+  .acta h3{ margin:12px 0 6px; font-size:0.95rem; }
+  .acta .txt{ white-space:pre-wrap; font-size:0.93rem; }
+  .acta ol{ margin:0; padding-left:20px; } .acta li{ margin:4px 0; }
+  .files{ display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .tk{ font-size:1.2rem; line-height:1; width:24px; text-align:center; }
+  @media (prefers-color-scheme: dark){ .ptabs button.on{ color:#10141a; } }
   @media (prefers-color-scheme: dark){ .btn{ color:#10141a; } .brand i{ color:#10141a; } }
 </style>
 </head>
@@ -93,7 +102,7 @@
   const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
   const MESES_C = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
   const TE = new TextEncoder(), TD = new TextDecoder();
-  let session = { token: '', fileId: '', data: null, entry: null, payload: null, year: new Date().getFullYear() };
+  let session = { token: '', fileId: '', data: null, entry: null, payload: null, year: new Date().getFullYear(), tab: 'cuotas', comun: null };
 
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, c=> ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
   function clp(n){ n = Math.round(Number(n) || 0); return (n < 0 ? '-$' : '$') + String(Math.abs(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); }
@@ -112,7 +121,7 @@
     const salt = (await sha('cs-salt:' + token)).slice(0, 16);
     return crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: ITER, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
   }
-  function brand(){ return `<div class="brand"><i>✊</i>${esc(session.data && session.data.sindicato ? session.data.sindicato : 'Mis cuotas')}</div>`; }
+  function brand(){ return `<div class="brand"><i>✊</i>${esc(session.data && session.data.sindicato ? session.data.sindicato : 'Portal del socio')}</div>`; }
   function message(icon, title, text){
     app.innerHTML = `${brand()}<div class="card msg"><div class="icon">${icon}</div><h1>${esc(title)}</h1><div class="dim">${esc(text)}</div></div>`;
   }
@@ -143,7 +152,7 @@
       if(ok){
         lsSet('cp_fail::' + session.token, null);
         if(document.getElementById('rec') && document.getElementById('rec').checked) lsSet('cp_pin::' + session.token, pin);
-        render();
+        render(); cargarComun();
       } else {
         const n = Number(lsGet('cp_fail::' + session.token) || 0) + 1;
         lsSet('cp_fail::' + session.token, String(n));
@@ -204,8 +213,23 @@
     const proxIdx = c.due + 1;
     const pm = MESES[proxIdx % 12]; const prox = pm.charAt(0).toUpperCase() + pm.slice(1) + ' · vence el ' + (p.dv || 10);
     const desc = p.desc || [];
-    app.innerHTML = `${brand()}
-    <div class="card hero"><div class="dim small">Estado de cuenta de</div><h1>${esc(p.nombre)}</h1>${p.rut ? `<div class="dim small">${esc(p.rut)}</div>` : ''}${p.fin ? `<div class="small" style="margin-top:4px"><span class="chip neutral">Retiro: ${esc(mesLabel(p.fin))}</span></div>` : ''}</div>
+    const cm = session.comun, mt = p.mt || [];
+    const tabs = [['cuotas', '💵 Mis cuotas']];
+    if(cm && cm.actas.length) tabs.push(['actas', '📄 Actas']);
+    if((cm && cm.tareas.length) || mt.length) tabs.push(['tareas', '✅ Acuerdos']);
+    if(!tabs.some(t=> t[0] === session.tab)) session.tab = 'cuotas';
+    const head = `${brand()}
+    <div class="card hero"><div class="dim small">${session.tab === 'cuotas' ? 'Estado de cuenta de' : 'Socio(a)'}</div><h1>${esc(p.nombre)}</h1>${p.rut ? `<div class="dim small">${esc(p.rut)}</div>` : ''}${p.fin ? `<div class="small" style="margin-top:4px"><span class="chip neutral">Retiro: ${esc(mesLabel(p.fin))}</span></div>` : ''}</div>
+    ${tabs.length > 1 ? `<div class="ptabs">${tabs.map(t=> `<button type="button" data-tab="${t[0]}" class="${t[0] === session.tab ? 'on' : ''}">${t[1]}</button>`).join('')}</div>` : ''}`;
+    const salir = session.sinPin ? '' : `<div class="actions"><button class="btn sec" id="lock">🔒 Salir${lsGet('cp_pin::' + session.token) ? ' y olvidar PIN' : ''}</button></div>`;
+    const wire = ()=>{
+      app.querySelectorAll('.ptabs button').forEach(b=> b.onclick = ()=>{ session.tab = b.dataset.tab; render(); window.scrollTo(0, 0); });
+      const lk = document.getElementById('lock'); if(lk) lk.onclick = ()=>{ lsSet('cp_pin::' + session.token, null); session.payload = null; askPin(''); };
+    };
+    if(session.tab === 'actas'){ app.innerHTML = head + actasHtml(cm) + salir; wire(); app.querySelectorAll('[data-file]').forEach(b=> b.onclick = ()=> abrirArchivo(b)); return; }
+    if(session.tab === 'tareas'){ app.innerHTML = head + tareasHtml(cm, mt) + salir; wire(); return; }
+    app.innerHTML = `${head}
+    ${mt.filter(t=> t.e !== 'cumplida').length ? `<div class="card"><h2>📌 Tienes ${mt.filter(t=> t.e !== 'cumplida').length} tarea(s) a tu cargo</h2>${mt.filter(t=> t.e !== 'cumplida').slice(0, 3).map(tareaRow).join('')}</div>` : ''}
     ${c.deuda > 0
       ? `<div class="status bad"><div class="ico">⚠️</div><div><h2>Tienes ${clp(c.deuda)} pendiente</h2><div class="small">${c.meses.length ? (c.meses.length === 1 ? 'Adeudas 1 mes: ' : `Adeudas ${c.meses.length} meses: `) + esc(c.meses.map(m=> mesLabel(m, true)).join(', ')) : 'Tienes cobros pendientes.'}</div></div></div>`
       : `<div class="status ok"><div class="ico">✅</div><div><h2>¡Estás al día!</h2><div class="small">No tienes cuotas vencidas pendientes.</div></div></div>`}
@@ -226,11 +250,60 @@
     ${p.plan ? `<div class="card"><h2>🤝 Mi plan de pago</h2><div class="row"><div class="main"><div class="title">${p.plan.p} de ${p.plan.n} cuotas descontadas</div><div class="sub">Cuotas de ${clp(p.plan.mo)}${p.plan.inc ? ' + cuota mensual' : ''}, por descuento por planilla · termina en ${esc(mesLabel(p.plan.fin))}</div></div><div class="val">${clp(p.plan.saldo)}</div></div><div class="dim small">El monto de la derecha es lo que falta del plan. Próximo descuento: <b>${clp(p.plan.prox)}</b>.</div></div>` : ''}
     ${desc.length ? `<div class="card"><h2>Descuentos</h2>${desc.map(d=> `<div class="row"><div class="main"><div class="title">${esc(d.c)}</div><div class="sub">${esc(mesLabel(d.m))}</div></div><div class="val ok">−${clp(d.mo)}</div></div>`).join('')}</div>` : ''}
     <div class="note">Información actualizada el ${esc(fdatetime(p.generado || session.data.generado))}. Los pagos recientes pueden tardar en aparecer.<br>Los pagos se imputan primero a la deuda más antigua. Ante cualquier duda, consulta con la directiva.</div>
-    ${session.sinPin ? '' : `<div class="actions"><button class="btn sec" id="lock">🔒 Salir${lsGet('cp_pin::' + session.token) ? ' y olvidar PIN' : ''}</button></div>`}`;
+    ${salir}`;
+    wire();
     const yp = document.getElementById('yPrev'), yn = document.getElementById('yNext');
     yp.onclick = ()=>{ session.year--; render(); };
     yn.onclick = ()=>{ session.year++; render(); };
-    const lk = document.getElementById('lock'); if(lk) lk.onclick = ()=>{ lsSet('cp_pin::' + session.token, null); session.payload = null; askPin(''); };
+  }
+  /* ---------- Actas y acuerdos ---------- */
+  const EST = { pendiente: ['Pendiente', '', 'neutral'], curso: ['En curso', '⏳', 'info'], cumplida: ['Cumplida', '✓', 'ok'] };
+  function hoyISO(){ const d = new Date(); return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
+  function tareaRow(t){
+    const e = EST[t.e] || EST.pendiente; const venc = t.p && t.e !== 'cumplida' && t.p < hoyISO();
+    return `<div class="row"><div class="tk">${e[1]}</div><div class="main" style="flex:1"><div class="title" style="${t.e === 'cumplida' ? 'text-decoration:line-through;color:var(--dim)' : ''}">${esc(t.x)}</div>
+      <div class="sub">${t.r ? '👤 ' + esc(t.r) : ''}${t.p ? (t.r ? ' · ' : '') + (venc ? '<b style="color:var(--bad)">venció ' + fdate(t.p) + '</b>' : 'plazo ' + fdate(t.p)) : ''}${t.a ? ' · 📄 ' + esc(t.a) : ''}</div></div><span class="chip ${e[2]}">${e[0]}</span></div>`;
+  }
+  function tareasHtml(cm, mt){
+    const pub = cm ? cm.tareas : [];
+    const ids = new Set(mt.map(t=> t.id));
+    const ord = a=> a.slice().sort((x, y)=> (x.e === 'cumplida') - (y.e === 'cumplida') || (x.p || '9999').localeCompare(y.p || '9999'));
+    const otras = pub.filter(t=> !ids.has(t.id));
+    return `${mt.length ? `<div class="card"><h2>📌 Mis tareas</h2>${ord(mt).map(tareaRow).join('')}</div>` : ''}
+      ${otras.length ? `<div class="card"><h2>Acuerdos y compromisos del sindicato</h2>${list(ord(otras), tareaRow, 12)}</div>` : ''}
+      <div class="note">Solo la directiva puede actualizar el estado de las tareas.</div>`;
+  }
+  function actasHtml(cm){
+    return cm.actas.map((a, i)=> `<div class="card acta"><h2 style="margin-bottom:2px">${esc(a.t)}</h2><div class="dim small">${fdate(a.f)} · ${esc(a.ti || '')}${a.q ? ' · ' + esc(a.q) : ''}</div>
+      ${a.ar.length ? `<div class="files">${a.ar.map(f=> `<button class="btn sec" data-file="${esc(f.id)}" data-n="${esc(f.n)}" data-ty="${esc(f.ty)}">📎 ${esc(f.n)}</button>`).join('')}</div>` : ''}
+      ${a.ac.length ? `<h3>Acuerdos</h3><ol>${a.ac.map(x=> `<li>${esc(x)}</li>`).join('')}</ol>` : ''}
+      ${a.c || a.as ? `<details ${i === 0 && !a.ar.length ? 'open' : ''}><summary>Ver acta completa</summary>${a.as ? `<div class="small" style="margin-top:6px"><b>Asistentes:</b> ${esc(a.as)}</div>` : ''}${a.c ? `<div class="txt" style="margin-top:8px">${esc(a.c)}</div>` : ''}</details>` : ''}
+    </div>`).join('');
+  }
+  async function gkey(){ return crypto.subtle.importKey('raw', b64ToBytes(session.payload.gk), 'AES-GCM', false, ['decrypt']); }
+  async function cargarComun(){
+    if(!session.payload || !session.payload.gk) return;
+    try{
+      const r = await fetch(`comun-${session.fileId}.json?_=${Date.now()}`, { cache: 'no-store' });
+      if(!r.ok) return;
+      const d = await r.json();
+      const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64ToBytes(d.iv) }, await gkey(), b64ToBytes(d.ct));
+      session.comun = JSON.parse(TD.decode(plain));
+      if(session.payload) render();
+    }catch(e){}
+  }
+  async function abrirArchivo(b){
+    const w = window.open('', '_blank'); const txt = b.textContent; b.disabled = true; b.textContent = '⏳ Abriendo…';
+    try{
+      const r = await fetch(`archivos-${session.fileId}/${b.dataset.file}.bin`, { cache: 'no-store' });
+      if(!r.ok) throw new Error();
+      const bytes = new Uint8Array(await r.arrayBuffer());
+      const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: bytes.slice(0, 12) }, await gkey(), bytes.slice(12));
+      const url = URL.createObjectURL(new Blob([plain], { type: b.dataset.ty }));
+      if(w) w.location = url; else { const l = document.createElement('a'); l.href = url; l.download = b.dataset.n; l.click(); }
+      setTimeout(()=> URL.revokeObjectURL(url), 120000);
+    }catch(e){ if(w) w.close(); alert('No se pudo abrir el archivo. Inténtalo más tarde.'); }
+    b.disabled = false; b.textContent = txt;
   }
   function list(items, fn, visible){
     const first = items.slice(0, visible).map(fn).join('');
@@ -256,9 +329,9 @@
     const id = hex(await sha('cs-id:' + token)).slice(0, 32);
     session.entry = session.data.entries && session.data.entries[id];
     if(!session.entry){ message('🤔', 'No encontramos tu tarjeta', 'Puede que tu tarjeta sea nueva y aún no esté publicada, o que haya sido reemplazada. Consulta con la directiva.'); return; }
-    if(await open('')){ session.sinPin = true; render(); return; }
+    if(await open('')){ session.sinPin = true; render(); cargarComun(); return; }
     const saved = lsGet('cp_pin::' + token);
-    if(saved && await open(saved)){ render(); return; }
+    if(saved && await open(saved)){ render(); cargarComun(); return; }
     if(saved) lsSet('cp_pin::' + token, null);
     askPin('');
   }

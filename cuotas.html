@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#2E7553">
-<title>Cuotas Sindicales</title>
+<title>Gestión Sindical</title>
 <link rel="manifest" href="./manifest.json">
 <link rel="icon" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -242,13 +242,16 @@ details.adv > summary{ cursor:pointer; color:var(--primary); font-weight:700; pa
 @media (max-width:520px){ .bar-col{ display:none; } }
 @media (max-width:520px){ table.mtab th, table.mtab td{ padding:7px 6px; font-size:0.84rem; } }
 .ceVer{ color:var(--text); text-decoration:none; font-weight:700; }
+.tk-b{ flex:none; width:38px; height:38px; border-radius:10px; border:1.5px solid var(--border); background:var(--card); color:var(--dim); font-size:1.25rem; line-height:1; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; margin-right:4px; }
+.tk-b.curso{ border-color:var(--info, #1D5A88); color:var(--info, #1D5A88); }
+.tk-b.cumplida{ border-color:var(--ok); background:var(--ok-bg); color:var(--ok); }
 
 </style>
 </head>
 <body>
 <header class="topbar">
   <div class="topbar-in">
-    <div class="brand"><span class="brand-ico" aria-hidden="true">✊</span><span id="brandName">Cuotas Sindicales</span></div>
+    <div class="brand"><span class="brand-ico" aria-hidden="true">✊</span><span id="brandName">Gestión Sindical</span></div>
     <button type="button" class="sync-chip" id="syncChip" data-act="sync-now">Sin conexión</button>
   </div>
   <nav class="tabs" id="tabs">
@@ -259,6 +262,8 @@ details.adv > summary{ cursor:pointer; color:var(--primary); font-weight:700; pa
     <button type="button" data-tab="cuotas">📅 Cobros</button>
     <button type="button" data-tab="gastos">🧾 Gastos</button>
     <button type="button" data-tab="ingresos">📈 Ingresos</button>
+    <button type="button" data-tab="actas">📄 Actas</button>
+    <button type="button" data-tab="tareas">✅ Tareas</button>
     <button type="button" data-tab="portal">🪪 Portal</button>
     <button type="button" data-tab="ajustes">⚙️ Ajustes</button>
   </nav>
@@ -272,7 +277,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 </script>
 <script>
-const APP_VERSION = "20261116132754";
+const APP_VERSION = "20261116134829";
 'use strict';
 /* =====================================================================
    CUOTAS SINDICALES — administración de cuotas y deuda de socios
@@ -327,10 +332,12 @@ function rutValido(r){
 /* ---------- Estado ----------
    Cada registro lleva id, u (última modificación, ms) y del (borrado lógico).
    Así los cambios de varios dirigentes se combinan registro por registro sin pisarse. */
-const COLS = ['tarifas', 'socios', 'pagos', 'cobros', 'ajustes', 'planes', 'autoriz', 'acuerdos', 'nominas', 'gastos', 'ingresos', 'correos'];
+const COLS = ['tarifas', 'socios', 'pagos', 'cobros', 'ajustes', 'planes', 'autoriz', 'acuerdos', 'nominas', 'gastos', 'ingresos', 'correos', 'actas', 'tareas'];
 const MEDIOS = ['Efectivo', 'Transferencia', 'Descuento por planilla', 'Depósito', 'Otro'];
 function emptyState(){
-  return { v: 1, config: { nombre: '', diaVencimiento: 10, mesInicioDefault: curYm(), portalAuto: true, u: 0 }, tarifas: [], socios: [], pagos: [], cobros: [], ajustes: [] };
+  const e = { v: 1, config: { nombre: '', diaVencimiento: 10, mesInicioDefault: curYm(), portalAuto: true, u: 0 } };
+  COLS.forEach(c=> e[c] = []);
+  return e;
 }
 function normalizeState(s){
   const e = emptyState();
@@ -935,7 +942,7 @@ function goTab(t){ currentTab = VIEWS[t] ? t : 'inicio'; lsSet('cs_tab', current
 function renderView(){
   if(!VIEWS[currentTab]) currentTab = 'inicio';
   $$('#tabs button').forEach(b=> b.classList.toggle('active', b.dataset.tab === currentTab));
-  $('#brandName').textContent = S.config.nombre || 'Cuotas Sindicales';
+  $('#brandName').textContent = S.config.nombre || 'Gestión Sindical';
   const v = $('#view');
   v.innerHTML = VIEWS[currentTab]();
   if(VIEWS[currentTab].mount) VIEWS[currentTab].mount(v);
@@ -969,7 +976,7 @@ VIEWS.inicio = function(){
   if(!S.config.nombre || sinTarifa || socios.length === 0){
     return `<div class="card welcome">
       <div class="big">✊</div>
-      <h2>Bienvenido/a a Cuotas Sindicales</h2>
+      <h2>Bienvenido/a a Gestión Sindical</h2>
       <p class="dim">Lleva el registro de pagos de cuotas y la deuda de cada socio. Cada socio puede revisar su estado de cuenta escaneando su tarjeta QR e ingresando su PIN.</p>
       <h3>Primeros pasos</h3>
       <ol class="steps">
@@ -3489,7 +3496,7 @@ async function huellaRegistrar(idx){
   const u = lockCfg().usuarios[idx];
   const cred = await navigator.credentials.create({ publicKey: {
     challenge: crypto.getRandomValues(new Uint8Array(32)),
-    rp: { name: 'Cuotas Sindicales' },
+    rp: { name: 'Gestión Sindical' },
     user: { id: crypto.getRandomValues(new Uint8Array(16)), name: u.nombre || 'tesorero', displayName: (u.nombre || 'Tesorero') + ' · ' + (S.config.nombre || 'Sindicato') },
     pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
     authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'discouraged' },
@@ -3640,6 +3647,307 @@ VIEWS.ajustes.mount = function(v){
   });
 };
 lkChip();
+
+/* =====================================================================
+   GESTIÓN: ACTAS DE ASAMBLEA y TAREAS / COMPROMISOS
+   - Actas escritas en la app y/o con archivos adjuntos (PDF, fotos).
+     Los archivos se suben cifrados al repositorio.
+   - Tareas con responsables (dirigentes o socios), plazo y estado.
+   - Lo marcado "público" se publica cifrado para el portal de socios
+     (comun-<id>.json), con una llave común que va dentro del registro
+     cifrado de cada socio.
+   ===================================================================== */
+const ESTADOS_T = { pendiente: ['Pendiente', '', 'neutral'], curso: ['En curso', '⏳', 'info'], cumplida: ['Cumplida', '✓', 'ok'] };
+['acta-ver', 'acta-archivo', 'acta-word', 'tarea-ver', 'tf-estado', 'tf-quien'].forEach(a=> ACT_LIBRES.add(a));
+
+/* ---------- Llave común (actas/tareas públicas y archivos) ---------- */
+function gkB64(){ return S.config.gk || ''; }
+function ensureGk(){ if(!S.config.gk){ S.config.gk = bytesToB64(crypto.getRandomValues(new Uint8Array(32))); S.config.u = now(); } return S.config.gk; }
+async function gkKey(b64, uso){ return crypto.subtle.importKey('raw', b64ToBytes(b64 || gkB64()), 'AES-GCM', false, uso || ['encrypt', 'decrypt']); }
+
+/* ---------- Archivos cifrados en el repositorio ---------- */
+function archivoNombre(id){ return 'archivos-' + conn().fileId + '/' + id + '.bin'; }
+async function comprimirImagen(file){
+  if(!/^image\//.test(file.type) || file.size < 350000) return file;
+  const img = await new Promise((res, rej)=>{ const i = new Image(); i.onload = ()=> res(i); i.onerror = rej; i.src = URL.createObjectURL(file); });
+  const k = Math.min(1, 2000 / Math.max(img.width, img.height));
+  const cv = document.createElement('canvas'); cv.width = Math.round(img.width * k); cv.height = Math.round(img.height * k);
+  cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+  URL.revokeObjectURL(img.src);
+  const b = await new Promise(r=> cv.toBlob(r, 'image/jpeg', 0.82));
+  return new File([b], file.name.replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' });
+}
+async function subirArchivo(file){
+  if(!connected()) throw new Error('Para adjuntar archivos conecta el repositorio en Ajustes.');
+  file = await comprimirImagen(file);
+  if(file.size > 20 * 1024 * 1024) throw new Error('El archivo pesa más de 20 MB.');
+  const id = randomId(12);
+  const key = await gkKey(ensureGk());
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, await file.arrayBuffer()));
+  const all = new Uint8Array(12 + ct.length); all.set(iv); all.set(ct, 12);
+  const c = conn();
+  const payload = { message: 'Archivo de acta (' + yo() + ')', content: bytesToB64(all) };
+  if(c.branch) payload.branch = c.branch;
+  const { res, body } = await gh(ghContentsPath(archivoNombre(id)), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+  if(!res.ok) throw new Error(ghError(res, body));
+  return { id, nombre: file.name, tipo: file.type || 'application/octet-stream', size: file.size };
+}
+async function bajarArchivo(a){
+  let bytes = null;
+  try{ const r = await fetch(archivoNombre(a.id) + '?_=' + Date.now(), { cache: 'no-store' }); if(r.ok) bytes = new Uint8Array(await r.arrayBuffer()); }catch(e){}
+  if(!bytes && connected()){
+    const c = conn();
+    const { res, body } = await gh(ghContentsPath(archivoNombre(a.id)) + (c.branch ? '?ref=' + encodeURIComponent(c.branch) : ''));
+    if(!res.ok) throw new Error(ghError(res, body));
+    let b64 = body.content;
+    if(!b64 || body.encoding !== 'base64'){ const r2 = await gh(`/repos/${encodeURIComponent(c.owner)}/${encodeURIComponent(c.repo)}/git/blobs/${body.sha}`); b64 = r2.body && r2.body.content; }
+    bytes = b64ToBytes(String(b64).replace(/\s/g, ''));
+  }
+  if(!bytes) throw new Error('No se pudo descargar el archivo.');
+  const key = await gkKey(gkB64(), ['decrypt']);
+  const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: bytes.slice(0, 12) }, key, bytes.slice(12));
+  return new Blob([plain], { type: a.tipo });
+}
+async function borrarArchivoRepo(a){
+  try{ const c = conn(); const { res, body } = await gh(ghContentsPath(archivoNombre(a.id))); if(!res.ok) return; await gh(ghContentsPath(archivoNombre(a.id)), { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: 'Borra archivo de acta', sha: body.sha, branch: c.branch || undefined }) }); }catch(e){}
+}
+ACT['acta-archivo'] = async el=>{
+  const ac = getById('actas', el.dataset.acta); const a = ac && (ac.archivos || []).find(x=> x.id === el.dataset.id); if(!a) return;
+  const w = window.open('', '_blank');
+  try{ const blob = await bajarArchivo(a); const url = URL.createObjectURL(blob); if(w) w.location = url; else { const l = document.createElement('a'); l.href = url; l.download = a.nombre; l.click(); } setTimeout(()=> URL.revokeObjectURL(url), 60000); }
+  catch(e){ if(w) w.close(); toast('⚠ ' + e.message, 'bad'); }
+};
+
+/* ---------- Vista: Actas ---------- */
+const TIPOS_ACTA = ['Asamblea ordinaria', 'Asamblea extraordinaria', 'Reunión de directiva', 'Otra'];
+VIEWS.actas = function(){
+  const all = live('actas').sort((a, b)=> (b.fecha || '').localeCompare(a.fecha || ''));
+  return `<div class="card"><div class="card-head"><h2>📄 Actas (${all.length})</h2><button class="btn primary sm" data-act="acta-nueva">+ Nueva acta</button></div>
+    ${all.length ? all.map(a=>{ const ts = live('tareas').filter(t=> t.actaId === a.id); const ok = ts.filter(t=> t.estado === 'cumplida').length;
+      return `<div class="row click" data-act="acta-ver" data-id="${a.id}"><div class="main"><div class="title">${esc(a.titulo || a.tipo)}</div>
+        <div class="sub">${fdate(a.fecha)} · ${esc(a.tipo || '')}${(a.archivos || []).length ? ' · 📎 ' + a.archivos.length : ''}${(a.acuerdos || []).length ? ' · ' + a.acuerdos.length + ' acuerdo(s)' : ''}${ts.length ? ` · tareas ${ok}/${ts.length}` : ''}</div></div>
+        ${a.publico ? '<span class="chip ok">Publicada a socios</span>' : '<span class="chip neutral">Solo directiva</span>'}</div>`; }).join('') : '<div class="empty">Aún no hay actas. Crea una escribiéndola aquí o adjuntando el acta escaneada.</div>'}
+  </div>`;
+};
+function openActaForm(id){
+  const a = id ? JSON.parse(JSON.stringify(getById('actas', id))) : { id: uid(), fecha: todayISO(), tipo: TIPOS_ACTA[0], titulo: '', asistentes: '', quorum: '', contenido: '', acuerdos: [], archivos: [], publico: false };
+  const st = { subiendo: false };
+  const m = openModal({
+    wide: true, sticky: true,
+    title: ()=> id ? 'Editar acta' : 'Nueva acta',
+    body: ()=> `<div class="grid3">
+        <label class="f">Fecha<input id="aaF" type="date" value="${esc(a.fecha)}"></label>
+        <label class="f">Tipo<select id="aaT">${TIPOS_ACTA.map(t=> `<option ${t === a.tipo ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+        <label class="f">Quórum / asistencia<input id="aaQ" value="${esc(a.quorum || '')}" placeholder="Ej: 24 de 30 socios"></label>
+        <label class="f" style="grid-column:1/-1">Título<input id="aaTi" value="${esc(a.titulo || '')}" placeholder="Ej: Asamblea de noviembre"></label>
+        <label class="f" style="grid-column:1/-1">Asistentes (opcional)<textarea id="aaA" style="min-height:60px" placeholder="Nombres separados por coma">${esc(a.asistentes || '')}</textarea></label>
+        <label class="f" style="grid-column:1/-1">Desarrollo del acta (opcional si adjuntas el acta escaneada)<textarea id="aaC" style="min-height:160px">${esc(a.contenido || '')}</textarea></label>
+        <label class="f" style="grid-column:1/-1">Acuerdos (uno por línea; luego puedes convertirlos en tareas)<textarea id="aaAc" style="min-height:100px" placeholder="Ej: Realizar rifa en diciembre">${esc((a.acuerdos || []).map(x=> x.texto).join('\n'))}</textarea></label>
+      </div>
+      <h3>Archivos adjuntos</h3>
+      ${(a.archivos || []).map((f, i)=> `<div class="row"><div class="main"><div class="title">📎 ${esc(f.nombre)}</div><div class="sub">${(f.size / 1024 / 1024).toFixed(1)} MB</div></div><button class="btn ghost sm aaDel" data-i="${i}">🗑️</button></div>`).join('') || '<div class="dim small">Sin archivos.</div>'}
+      <label class="btn sm" style="cursor:pointer;margin-top:8px">${st.subiendo ? '⟳ Subiendo…' : '📎 Adjuntar PDF o foto'}<input type="file" id="aaFile" accept="application/pdf,image/*" multiple style="display:none" ${st.subiendo ? 'disabled' : ''}></label>
+      ${connected() ? '' : '<div class="note warn small">Para adjuntar archivos y publicarlos a socios, conecta el repositorio en Ajustes.</div>'}
+      <label class="check" style="margin-top:12px"><input type="checkbox" id="aaP" ${a.publico ? 'checked' : ''}> Publicar a socios (la verán en el portal con su QR)</label>`,
+    foot: ()=> `${id ? '<button class="btn danger" id="aaBorrar">Eliminar</button><span style="flex:1"></span>' : ''}<button class="btn" data-act="close-modal">Cancelar</button><button class="btn primary" id="aaOk" ${st.subiendo ? 'disabled' : ''}>Guardar</button>`,
+    onMount: el=>{
+      const leer = ()=>{
+        a.fecha = $('#aaF', el).value; a.tipo = $('#aaT', el).value; a.quorum = $('#aaQ', el).value.trim(); a.titulo = $('#aaTi', el).value.trim();
+        a.asistentes = $('#aaA', el).value.trim(); a.contenido = $('#aaC', el).value; a.publico = $('#aaP', el).checked;
+        const lineas = $('#aaAc', el).value.split(/\r?\n/).map(x=> x.trim()).filter(Boolean);
+        const old = a.acuerdos || [];
+        a.acuerdos = lineas.map((t, i)=> { const prev = old.find(x=> x.texto === t) || (old[i] && !lineas.includes(old[i].texto) ? old[i] : null); return { id: prev ? prev.id : uid(), texto: t }; });
+      };
+      $$('.aaDel', el).forEach(b=> b.onclick = async ()=>{ leer(); const f = a.archivos[Number(b.dataset.i)]; if(!await confirmar(`¿Quitar "${esc(f.nombre)}"?`, 'Quitar', true)) return; a.archivos.splice(Number(b.dataset.i), 1); (a._borrar = a._borrar || []).push(f); drawModal(m); });
+      $('#aaFile', el).onchange = async e=>{
+        leer(); const files = Array.from(e.target.files || []); if(!files.length) return;
+        st.subiendo = true; drawModal(m);
+        for(const f of files){ try{ a.archivos.push(await subirArchivo(f)); }catch(err){ toast('⚠ ' + f.name + ': ' + err.message, 'bad', 9000); } }
+        st.subiendo = false; drawModal(m);
+      };
+      $('#aaOk', el).onclick = ()=>{
+        leer();
+        if(!a.fecha){ toast('Indica la fecha.', 'bad'); return; }
+        if(!a.titulo) a.titulo = a.tipo + ' ' + fdate(a.fecha);
+        const borrar = a._borrar || []; delete a._borrar;
+        if(a.publico || (a.archivos || []).length) ensureGk();
+        closeModal(); upsert('actas', a); borrar.forEach(borrarArchivoRepo);
+        toast('✓ Acta guardada', 'ok'); if(S.config.portalAuto) schedulePortal();
+      };
+      const del = $('#aaBorrar', el);
+      if(del) del.onclick = async ()=>{ if(!await confirmar('¿Eliminar esta acta y sus archivos? Las tareas asociadas se mantienen.', 'Eliminar', true)) return; const ac = getById('actas', id); closeModal(); while(modalStack.length) closeModal(); removeRec('actas', id); (ac.archivos || []).forEach(borrarArchivoRepo); if(S.config.portalAuto) schedulePortal(); };
+    },
+  });
+}
+ACT['acta-nueva'] = ()=> openActaForm(null);
+ACT['acta-editar'] = el=>{ closeModal(); openActaForm(el.dataset.id); };
+ACT['acta-ver'] = el=>{
+  const id = el.dataset.id;
+  openModal({
+    wide: true, live: true,
+    title: ()=>{ const a = getById('actas', id); return a ? esc(a.titulo || a.tipo) : 'Acta eliminada'; },
+    body: ()=>{
+      const a = getById('actas', id); if(!a) return '<div class="empty">Acta eliminada.</div>';
+      const ts = live('tareas').filter(t=> t.actaId === id);
+      return `<div class="btn-row" style="margin:-4px 0 10px"><span class="chip neutral">${fdate(a.fecha)}</span><span class="chip neutral">${esc(a.tipo)}</span>${a.quorum ? `<span class="chip neutral">${esc(a.quorum)}</span>` : ''}${a.publico ? '<span class="chip ok">Publicada a socios</span>' : '<span class="chip neutral">Solo directiva</span>'}</div>
+        ${(a.archivos || []).length ? `<div class="btn-row" style="margin-bottom:10px">${a.archivos.map(f=> `<button class="btn sm" data-act="acta-archivo" data-acta="${a.id}" data-id="${f.id}">📎 ${esc(f.nombre)}</button>`).join('')}</div>` : ''}
+        ${a.asistentes ? `<div class="small"><b>Asistentes:</b> ${esc(a.asistentes)}</div>` : ''}
+        ${a.contenido ? `<div class="note" style="white-space:pre-wrap;color:var(--text)">${esc(a.contenido)}</div>` : ''}
+        <h3>Acuerdos</h3>
+        ${(a.acuerdos || []).length ? a.acuerdos.map((x, i)=>{ const tt = ts.filter(t=> t.acuerdoId === x.id); return `<div class="row"><div class="main"><div class="title">${i + 1}. ${esc(x.texto)}</div>${tt.length ? `<div class="sub">${tt.map(t=> (t.estado === 'cumplida' ? '✓ ' : t.estado === 'curso' ? '⏳ ' : '• ') + esc(t.texto)).join(' · ')}</div>` : ''}</div><button class="btn sm" data-act="tarea-nueva" data-acta="${a.id}" data-acuerdo="${x.id}">＋ Tarea</button></div>`; }).join('') : '<div class="dim small">Sin acuerdos registrados.</div>'}
+        ${ts.filter(t=> !t.acuerdoId).length ? `<h3>Otras tareas de esta acta</h3>${ts.filter(t=> !t.acuerdoId).map(tareaRowHtml).join('')}` : ''}`;
+    },
+    foot: ()=> `<button class="btn" data-act="acta-word" data-id="${id}">📄 Word</button><button class="btn" data-act="tarea-nueva" data-acta="${id}">＋ Tarea</button><span style="flex:1"></span><button class="btn" data-act="close-modal">Cerrar</button><button class="btn primary" data-act="acta-editar" data-id="${id}">✏️ Editar</button>`,
+  });
+};
+ACT['acta-word'] = async el=>{
+  const a = getById('actas', el.dataset.id); if(!a) return;
+  try{
+    const D = await loadDocx();
+    const { Document, Packer, Paragraph, TextRun, AlignmentType } = D;
+    const F = 'Calibri', SZ = 22;
+    const t = (x, o)=> new TextRun(Object.assign({ text: String(x), font: F, size: SZ }, o || {}));
+    const p = (r, o)=> new Paragraph(Object.assign({ children: Array.isArray(r) ? r : [r], spacing: { after: 100 } }, o || {}));
+    const ch = [
+      p(t(S.config.nombre || 'Sindicato', { bold: true }), { alignment: AlignmentType.CENTER }),
+      p(t('ACTA · ' + (a.titulo || a.tipo).toUpperCase(), { bold: true }), { alignment: AlignmentType.CENTER, spacing: { after: 200 } }),
+      p([t('Fecha: ', { bold: true }), t(fdate(a.fecha))]), p([t('Tipo: ', { bold: true }), t(a.tipo)]),
+    ];
+    if(a.quorum) ch.push(p([t('Quórum: ', { bold: true }), t(a.quorum)]));
+    if(a.asistentes) ch.push(p([t('Asistentes: ', { bold: true }), t(a.asistentes)]));
+    if(a.contenido){ ch.push(p(t('I. Desarrollo', { bold: true }), { spacing: { before: 200, after: 100 } })); a.contenido.split(/\r?\n/).forEach(l=> ch.push(p(t(l)))); }
+    if((a.acuerdos || []).length){ ch.push(p(t((a.contenido ? 'II' : 'I') + '. Acuerdos', { bold: true }), { spacing: { before: 200, after: 100 } })); a.acuerdos.forEach((x, i)=> ch.push(p(t((i + 1) + ') ' + x.texto)))); }
+    ch.push(p(t(''), { spacing: { before: 600 } }), p(t('_____________________________          _____________________________')), p(t('Presidente(a)                                          Secretario(a)')));
+    const doc = new Document({ styles: { default: { document: { run: { font: F, size: SZ } } } }, sections: [{ properties: { page: { size: { width: 12240, height: 15840 }, margin: { top: 1134, bottom: 1134, left: 1134, right: 1134 } } }, children: ch }] });
+    const blob = await Packer.toBlob(doc); const l = document.createElement('a'); l.href = URL.createObjectURL(blob); l.download = `acta-${a.fecha}.docx`; l.click(); setTimeout(()=> URL.revokeObjectURL(l.href), 3000);
+  }catch(e){ toast('⚠ ' + (e.message || e), 'bad'); }
+};
+
+/* ---------- Tareas ---------- */
+function respTxt(t){ return (t.responsables || []).map(r=> r.socioId ? (socioNomT(r.socioId) || '?') : r.nombre).filter(Boolean).join(', '); }
+function socioNomT(id){ const s = S.socios.find(x=> x.id === id); return s ? s.nombre : ''; }
+function tareaVencida(t){ return t.plazo && t.estado !== 'cumplida' && t.plazo < todayISO(); }
+function tareaRowHtml(t){
+  const e = ESTADOS_T[t.estado || 'pendiente'];
+  const ac = t.actaId ? getById('actas', t.actaId) : null;
+  return `<div class="row"><button type="button" class="tk-b ${t.estado || 'pendiente'}" data-act="tarea-estado" data-id="${t.id}" title="Cambiar estado">${e[1]}</button>
+    <div class="main click" data-act="tarea-ver" data-id="${t.id}" style="cursor:pointer"><div class="title" style="${t.estado === 'cumplida' ? 'text-decoration:line-through;color:var(--dim)' : ''}">${esc(t.texto)}</div>
+    <div class="sub">${respTxt(t) ? '👤 ' + esc(respTxt(t)) + ' · ' : ''}${t.plazo ? (tareaVencida(t) ? '<b style="color:var(--bad)">venció ' + fdate(t.plazo) + '</b>' : 'plazo ' + fdate(t.plazo)) + ' · ' : ''}${ac ? '📄 ' + esc(ac.titulo || ac.tipo) + ' · ' : ''}${t.publico ? 'pública' : 'solo directiva'}</div></div>
+    <span class="chip ${e[2]}">${e[0]}</span></div>`;
+}
+ui.tfEstado = ui.tfEstado || 'abiertas'; ui.tfQuien = ui.tfQuien || '';
+VIEWS.tareas = function(){
+  const all = live('tareas');
+  const quienes = Array.from(new Set(all.flatMap(t=> (t.responsables || []).map(r=> r.socioId ? 's:' + r.socioId : 'n:' + r.nombre)))).map(k=> [k, k[0] === 's' ? socioNomT(k.slice(2)) : k.slice(2)]).sort((a, b)=> a[1].localeCompare(b[1]));
+  const lista = all.filter(t=> ui.tfEstado === 'todas' || (ui.tfEstado === 'abiertas' ? t.estado !== 'cumplida' : ui.tfEstado === 'vencidas' ? tareaVencida(t) : t.estado === 'cumplida'))
+    .filter(t=> !ui.tfQuien || (t.responsables || []).some(r=> (r.socioId ? 's:' + r.socioId : 'n:' + r.nombre) === ui.tfQuien))
+    .sort((a, b)=> (a.estado === 'cumplida') - (b.estado === 'cumplida') || (a.plazo || '9999').localeCompare(b.plazo || '9999'));
+  const n = k=> all.filter(t=> k === 'todas' || (k === 'abiertas' ? t.estado !== 'cumplida' : k === 'vencidas' ? tareaVencida(t) : t.estado === 'cumplida')).length;
+  return `<div class="card"><div class="card-head"><h2>✅ Tareas y compromisos</h2><button class="btn primary sm" data-act="tarea-nueva">+ Nueva tarea</button></div>
+    <div class="toolbar"><div class="seg">${[['abiertas', 'Abiertas'], ['vencidas', 'Vencidas'], ['cumplidas', 'Cumplidas'], ['todas', 'Todas']].map(([k, l])=> `<button type="button" data-act="tf-estado" data-v="${k}" class="${ui.tfEstado === k ? 'active' : ''}">${l} (${n(k)})</button>`).join('')}</div>
+      <select id="tfQ"><option value="">Todos los responsables</option>${quienes.map(([k, l])=> `<option value="${esc(k)}" ${k === ui.tfQuien ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></div>
+    <p class="dim tiny">Toca el cuadro de la izquierda para cambiar el estado: vacío = pendiente → ⏳ en curso → ✓ cumplida.</p>
+    ${lista.length ? lista.map(tareaRowHtml).join('') : '<div class="empty">No hay tareas con ese filtro.</div>'}
+  </div>`;
+};
+VIEWS.tareas.mount = v=>{ const q = $('#tfQ', v); if(q) q.onchange = ()=>{ ui.tfQuien = q.value; renderView(); }; };
+ACT['tf-estado'] = el=>{ ui.tfEstado = el.dataset.v; renderView(); };
+ACT['tarea-estado'] = el=>{
+  const t = Object.assign({}, getById('tareas', el.dataset.id)); const orden = ['pendiente', 'curso', 'cumplida'];
+  t.estado = orden[(orden.indexOf(t.estado || 'pendiente') + 1) % 3]; if(t.estado === 'cumplida') t.cumplidaEl = todayISO();
+  const y = window.scrollY; upsert('tareas', t); window.scrollTo(0, y); refreshOpenModal(); if(S.config.portalAuto) schedulePortal();
+};
+function openTareaForm(id, pre){
+  const ac0 = pre && pre.actaId ? getById('actas', pre.actaId) : null;
+  const acu = ac0 && pre.acuerdoId ? (ac0.acuerdos || []).find(x=> x.id === pre.acuerdoId) : null;
+  const t = id ? JSON.parse(JSON.stringify(getById('tareas', id))) : { id: uid(), texto: acu ? acu.texto : '', actaId: pre && pre.actaId || '', acuerdoId: pre && pre.acuerdoId || '', responsables: [], plazo: '', estado: 'pendiente', publico: ac0 ? !!ac0.publico : true, notas: '' };
+  const m = openModal({
+    wide: true,
+    title: ()=> id ? 'Editar tarea' : 'Nueva tarea',
+    body: ()=> `<label class="f">Tarea o compromiso<input id="ttT" value="${esc(t.texto)}" placeholder="Ej: Cotizar premios para la rifa"></label>
+      <div class="grid3" style="margin-top:8px">
+        <label class="f">Plazo<input id="ttP" type="date" value="${esc(t.plazo || '')}"></label>
+        <label class="f">Estado<select id="ttE">${Object.entries(ESTADOS_T).map(([k, v])=> `<option value="${k}" ${k === (t.estado || 'pendiente') ? 'selected' : ''}>${v[0]}</option>`).join('')}</select></label>
+        <label class="f">Acta<select id="ttA"><option value="">— Sin acta —</option>${live('actas').sort((a, b)=> (b.fecha || '').localeCompare(a.fecha || '')).map(a=> `<option value="${a.id}" ${a.id === t.actaId ? 'selected' : ''}>${fdate(a.fecha)} · ${esc(a.titulo || a.tipo)}</option>`).join('')}</select></label>
+      </div>
+      <h3>Responsables</h3>
+      <div class="btn-row" id="ttR">${(t.responsables || []).map((r, i)=> `<span class="chip primary">${esc(r.socioId ? socioNomT(r.socioId) : r.nombre)}${r.socioId ? '' : ' (dirigente)'} <a href="#" data-i="${i}" class="ttX" style="color:inherit">✕</a></span>`).join('') || '<span class="dim small">Sin responsables.</span>'}</div>
+      <div class="grid2" style="margin-top:8px">
+        <label class="f">Agregar socio<select id="ttS"><option value="">Elegir socio…</option>${sociosOrdenados().filter(s=> !socioBaja(s)).map(s=> `<option value="${s.id}">${esc(s.nombre)}</option>`).join('')}</select></label>
+        <label class="f">Agregar otra persona (dirigente, comisión…)<span style="display:flex;gap:6px"><input id="ttN" placeholder="Nombre"><button type="button" class="btn sm" id="ttNadd">＋</button></span></label>
+      </div>
+      <label class="f" style="margin-top:8px">Notas (opcional)<textarea id="ttNo" style="min-height:60px">${esc(t.notas || '')}</textarea></label>
+      <label class="check" style="margin-top:10px"><input type="checkbox" id="ttPub" ${t.publico ? 'checked' : ''}> Visible para todos los socios en el portal</label>
+      <p class="dim tiny">Los socios responsables siempre ven sus propias tareas en su portal.</p>`,
+    foot: ()=> `${id ? '<button class="btn danger" id="ttDel">Eliminar</button><span style="flex:1"></span>' : ''}<button class="btn" data-act="close-modal">Cancelar</button><button class="btn primary" id="ttOk">Guardar</button>`,
+    onMount: el=>{
+      const leer = ()=>{ t.texto = $('#ttT', el).value.trim(); t.plazo = $('#ttP', el).value; t.estado = $('#ttE', el).value; t.actaId = $('#ttA', el).value; t.notas = $('#ttNo', el).value.trim(); t.publico = $('#ttPub', el).checked; };
+      $('#ttS', el).onchange = e=>{ leer(); if(e.target.value && !t.responsables.some(r=> r.socioId === e.target.value)) t.responsables.push({ socioId: e.target.value }); drawModal(m); };
+      $('#ttNadd', el).onclick = ()=>{ leer(); const n = $('#ttN', el).value.trim(); if(n) t.responsables.push({ nombre: n }); drawModal(m); };
+      $$('.ttX', el).forEach(x=> x.onclick = e=>{ e.preventDefault(); leer(); t.responsables.splice(Number(x.dataset.i), 1); drawModal(m); });
+      $('#ttOk', el).onclick = ()=>{
+        leer(); if(!t.texto){ toast('Escribe la tarea.', 'bad'); return; }
+        if(t.acuerdoId && t.actaId !== (pre && pre.actaId)) t.acuerdoId = (getById('tareas', id) || {}).actaId === t.actaId ? t.acuerdoId : '';
+        if(t.estado === 'cumplida' && !t.cumplidaEl) t.cumplidaEl = todayISO();
+        if(t.publico) ensureGk();
+        closeModal(); upsert('tareas', t); refreshOpenModal(); toast('✓ Tarea guardada', 'ok'); if(S.config.portalAuto) schedulePortal();
+      };
+      const d = $('#ttDel', el); if(d) d.onclick = async ()=>{ if(!await confirmar('¿Eliminar esta tarea?', 'Eliminar', true)) return; closeModal(); removeRec('tareas', id); refreshOpenModal(); };
+    },
+  });
+}
+ACT['tarea-nueva'] = el=> openTareaForm(null, { actaId: el.dataset.acta || '', acuerdoId: el.dataset.acuerdo || '' });
+ACT['tarea-ver'] = el=> openTareaForm(el.dataset.id);
+
+/* ---------- Inicio: módulos y tareas próximas ---------- */
+MODULOS.splice(MODULOS.findIndex(x=> x[0] === 'portal'), 0,
+  ['actas', '📄', 'Actas', ()=> `${live('actas').length} acta(s)`],
+  ['tareas', '✅', 'Tareas', ()=>{ const v = live('tareas').filter(tareaVencida).length, a = live('tareas').filter(t=> t.estado !== 'cumplida').length; return a + ' abierta(s)' + (v ? ' · ' + v + ' vencida(s)' : ''); }]);
+const _vInicioG = VIEWS.inicio;
+VIEWS.inicio = function(){
+  const h = _vInicioG();
+  if(h.indexOf('class="card welcome"') >= 0) return h;
+  const lim = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10);
+  const prox = live('tareas').filter(t=> t.estado !== 'cumplida' && t.plazo && t.plazo <= lim).sort((a, b)=> a.plazo.localeCompare(b.plazo));
+  if(!prox.length) return h;
+  const card = `<div class="card"><div class="card-head"><h2>Tareas por vencer</h2><button class="btn ghost" data-act="go" data-tab="tareas">Ver todas</button></div>${prox.slice(0, 6).map(tareaRowHtml).join('')}</div>`;
+  const i = h.indexOf('<div class="card"><div class="card-head"><h2>Balance mensual');
+  return i > 0 ? h.slice(0, i) + card + h.slice(i) : h + card;
+};
+
+/* ---------- Portal: contenido común + tareas propias ---------- */
+function comunName(){ return 'comun-' + conn().fileId + '.json'; }
+function tareaPortal(t){ const ac = t.actaId ? getById('actas', t.actaId) : null; return { id: t.id, x: t.texto, e: t.estado || 'pendiente', p: t.plazo || '', r: respTxt(t), a: ac && ac.publico ? (ac.titulo || ac.tipo) : '', c: t.cumplidaEl || '' }; }
+const _bpp = buildPortalPayload;
+buildPortalPayload = function(s){
+  const p = _bpp(s);
+  if(gkB64()) p.gk = gkB64();
+  const mias = live('tareas').filter(t=> (t.responsables || []).some(r=> r.socioId === s.id));
+  if(mias.length) p.mt = mias.map(tareaPortal);
+  return p;
+};
+async function publicarComun(){
+  if(!connected() || !gkB64()) return;
+  const data = {
+    actas: live('actas').filter(a=> a.publico).sort((a, b)=> (b.fecha || '').localeCompare(a.fecha || '')).map(a=> ({ id: a.id, f: a.fecha, t: a.titulo || a.tipo, ti: a.tipo, q: a.quorum || '', as: a.asistentes || '', c: a.contenido || '', ac: (a.acuerdos || []).map(x=> x.texto), ar: (a.archivos || []).map(f=> ({ id: f.id, n: f.nombre, ty: f.tipo, s: f.size })) })),
+    tareas: live('tareas').filter(t=> t.publico).map(tareaPortal),
+  };
+  const hash = hex(await shaBytes(JSON.stringify(data) + gkB64())).slice(0, 20);
+  if(hash === lsGet('cs_comun_hash::' + conn().fileId, '')) return;
+  const key = await gkKey(gkB64());
+  const enc = await aesEncrypt(key, JSON.stringify(data));
+  const file = JSON.stringify({ v: 1, app: 'gestion-comun', generado: new Date().toISOString(), iv: enc.iv, ct: enc.ct });
+  let sha = null; try{ const cur = await ghGetFile(comunName()); sha = cur && cur.sha; }catch(e){}
+  await ghPutFile(comunName(), file, sha, 'Actas y acuerdos (' + yo() + ')');
+  lsSet('cs_comun_hash::' + conn().fileId, hash);
+}
+const _pubPortal = publishPortal;
+publishPortal = async function(force, onProgress, silent){
+  const r = await _pubPortal(force, onProgress, silent);
+  try{ await publicarComun(); }catch(e){ if(!silent) toast('⚠ Actas: ' + (e.message || e), 'bad'); }
+  return r;
+};
 
 /* =====================================================================
    GOOGLE DRIVE (sincronización con tu cuenta de Google)
