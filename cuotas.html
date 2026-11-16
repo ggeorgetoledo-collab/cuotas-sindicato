@@ -241,6 +241,7 @@ details.adv > summary{ cursor:pointer; color:var(--primary); font-weight:700; pa
 .b-ok{ background:var(--ok); } .b-bad{ background:var(--bad); }
 @media (max-width:520px){ .bar-col{ display:none; } }
 @media (max-width:520px){ table.mtab th, table.mtab td{ padding:7px 6px; font-size:0.84rem; } }
+.ceVer{ color:var(--text); text-decoration:none; font-weight:700; }
 
 </style>
 </head>
@@ -325,7 +326,7 @@ function rutValido(r){
 /* ---------- Estado ----------
    Cada registro lleva id, u (última modificación, ms) y del (borrado lógico).
    Así los cambios de varios dirigentes se combinan registro por registro sin pisarse. */
-const COLS = ['tarifas', 'socios', 'pagos', 'cobros', 'ajustes', 'planes', 'autoriz', 'acuerdos', 'nominas', 'gastos', 'ingresos'];
+const COLS = ['tarifas', 'socios', 'pagos', 'cobros', 'ajustes', 'planes', 'autoriz', 'acuerdos', 'nominas', 'gastos', 'ingresos', 'correos'];
 const MEDIOS = ['Efectivo', 'Transferencia', 'Descuento por planilla', 'Depósito', 'Otro'];
 function emptyState(){
   return { v: 1, config: { nombre: '', diaVencimiento: 10, mesInicioDefault: curYm(), portalAuto: true, u: 0 }, tarifas: [], socios: [], pagos: [], cobros: [], ajustes: [] };
@@ -1224,6 +1225,7 @@ function fichaBody(id){
     ${c.deuda > 0 ? `<button class="btn" data-act="condonar" data-id="${id}">🧽 Borrar deuda</button>` : ''}
     ${(()=>{ const pl = planActivoDe(id); return pl ? `<button class="btn" data-act="ver-plan" data-id="${pl.id}">🤝 Plan de pago (${planResumen(pl).pagadas}/${pl.cuotas})</button>` : (c.deuda > 0 ? `<button class="btn" data-act="nuevo-plan" data-id="${id}">🤝 Crear plan de pago</button>` : ''); })()}
     <button class="btn" data-act="tarjeta" data-id="${id}">🪪 Tarjeta y PIN</button>
+    <button class="btn" data-act="correo-socio" data-id="${id}">✉️ Enviar por correo</button>
     <button class="btn" data-act="print-estado" data-id="${id}">🖨️ Estado de cuenta</button>
     <button class="btn" data-act="editar-socio" data-id="${id}">✏️ Editar datos</button>
     ${s.mesTermino ? `<button class="btn" data-act="reincorporar" data-id="${id}">↩️ Reincorporar</button>` : `<button class="btn" data-act="suspender" data-id="${id}">${s.suspDesde ? '⏸️ Suspensión' : '⏸️ Suspender'}</button><button class="btn danger" data-act="dar-baja" data-id="${id}">⛔ Dar de baja</button>`}
@@ -2847,6 +2849,284 @@ ACT['unirse'] = ()=> openUnirse(null);
     navigator.serviceWorker.register('./sw.js').catch(()=>{});
   }
 })();
+
+/* =====================================================================
+   CORREOS: envía a cada socio su estado de cuenta desde tu Gmail.
+   - Envío masivo con un toque (con vista previa y plantilla editable).
+   - Recordatorio mensual: desde el día elegido, Inicio avisa que toca
+     enviar y queda listo en un toque (opcionalmente se abre solo).
+   ===================================================================== */
+const GMAIL_SCOPE = 'https://www.googleapis.com/auth/gmail.send';
+let gmailTok = null;
+const CORREO_ASUNTO_DEF = 'Estado de cuenta de cuotas sindicales · {mes}';
+const CORREO_CUERPO_DEF = `Hola {nombre}:
+
+Te enviamos tu estado de cuenta de cuotas sindicales al {fecha}.
+
+{resumen}
+
+{detalle}
+
+{plan}
+{enlace}
+
+Si ya pagaste o crees que hay un error, responde este correo y lo revisamos.
+
+Saludos,
+{sindicato}`;
+function correoCfg(){
+  const c = S.config;
+  return { asunto: c.correoAsunto || CORREO_ASUNTO_DEF, cuerpo: c.correoCuerpo || CORREO_CUERPO_DEF, diaAuto: Number(c.correoDia) || 0, soloDeuda: c.correoSoloDeuda !== false, abrirSolo: !!c.correoAbrirSolo };
+}
+function emailValido(e){ return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(e || '').trim()); }
+
+/* ---------- Texto del correo para un socio ---------- */
+function correoDatos(s){
+  const c = cuentaSocio(s);
+  const pend = c.items.filter(it=> it.vencido && it.monto > 0 && it.estado !== 'pagado');
+  const pl = typeof planActivoDe === 'function' ? planActivoDe(s.id) : null;
+  const resumen = c.deuda > 0
+    ? `Tu deuda vencida es de ${clp(c.deuda)}${c.mesesAdeudados.length ? ` (${c.mesesAdeudados.length === 1 ? '1 mes' : c.mesesAdeudados.length + ' meses'}: ${c.mesesAdeudados.map(m=> mesLabel(m, true)).join(', ')})` : ''}.`
+    : `Estás al día con tus cuotas. ¡Gracias!${c.saldoFavor ? ` Tienes ${clp(c.saldoFavor)} a favor.` : ''}`;
+  const detalle = pend.length ? 'Detalle de lo pendiente:\n' + pend.map(it=> `  • ${it.concepto}: ${clp(it.monto - it.pagado)}`).join('\n') + `\n  Total: ${clp(c.deuda)}` : '';
+  let plan = '';
+  if(pl){ const r = planResumen(pl); plan = `Plan de pago: llevas ${r.pagadas} de ${r.n} cuotas descontadas; saldo del plan ${clp(r.saldo)}.\n`; }
+  const enlace = (connected() && s.token && portalBaseUrl()) ? `Puedes revisar tu estado de cuenta en cualquier momento aquí (necesitas tu PIN):\n${socioPortalUrl(s)}\n` : '';
+  const ult = c.ultimoPago ? `Último pago registrado: ${fdate(c.ultimoPago.fecha)} por ${clp(c.ultimoPago.monto)}.` : '';
+  return { c, pend, resumen, detalle, plan, enlace, ult };
+}
+function correoRender(tpl, s, d){
+  const rep = {
+    nombre: s.nombre, primer_nombre: s.nombre.split(/\s+/).slice(-1)[0], deuda: clp(d.c.deuda),
+    meses: d.c.mesesAdeudados.map(m=> mesLabel(m, true)).join(', ') || 'ninguno',
+    resumen: d.resumen + (d.ult ? '\n' + d.ult : ''), detalle: d.detalle, plan: d.plan, enlace: d.enlace,
+    sindicato: S.config.nombre || 'La directiva', fecha: fdate(todayISO()), mes: mesLabel(curYm()), cuota: clp(tarifaActual()),
+  };
+  return tpl.replace(/\{(\w+)\}/g, (m, k)=> rep[k] !== undefined ? rep[k] : m).replace(/\n{3,}/g, '\n\n').trim();
+}
+
+/* ---------- Gmail ---------- */
+function getGmailToken(){
+  return new Promise((resolve, reject)=>{
+    if(gmailTok && gmailTok.expires_at > Date.now() + 60000){ resolve(gmailTok.access_token); return; }
+    if(!(window.google && google.accounts && google.accounts.oauth2)){ gdLoadGis().catch(()=>{}); reject(new Error('Cargando Google… espera 2 segundos y toca de nuevo.')); return; }
+    const cfg = {
+      client_id: gdClientId(), scope: GMAIL_SCOPE, prompt: '',
+      callback: resp=>{
+        if(resp.error){ reject(new Error('Google no dio el permiso (' + (resp.error_description || resp.error) + ')')); return; }
+        if(!google.accounts.oauth2.hasGrantedAllScopes(resp, GMAIL_SCOPE)){ reject(new Error('No se marcó el permiso "Enviar correo electrónico en tu nombre".')); return; }
+        gmailTok = { access_token: resp.access_token, expires_at: Date.now() + (Number(resp.expires_in) || 3600) * 1000 };
+        resolve(resp.access_token);
+      },
+      error_callback: err=>{ const t = err && err.type; reject(new Error(t === 'popup_closed' ? 'Se cerró la ventana de Google sin dar el permiso.' : t === 'popup_failed_to_open' ? 'El navegador bloqueó la ventana de Google.' : 'No se pudo abrir la ventana de Google.')); },
+    };
+    if(gdEmail()) cfg.login_hint = gdEmail();
+    google.accounts.oauth2.initTokenClient(cfg).requestAccessToken();
+  });
+}
+function b64u8(str){ return btoa(unescape(encodeURIComponent(str))); }
+function hdr(str){ return /^[\x20-\x7E]*$/.test(str) ? str : '=?UTF-8?B?' + b64u8(str) + '?='; }
+function textoAHtml(t){
+  return '<div style="font-family:Calibri,Arial,sans-serif;font-size:15px;color:#111;line-height:1.5">' + esc(t).replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1">$1</a>').replace(/\n/g, '<br>') + '</div>';
+}
+function mimeCorreo(to, asunto, texto){
+  const b = 'cs_' + Math.random().toString(36).slice(2);
+  const wrap = s=> s.replace(/.{1,76}/g, '$&\r\n');
+  const from = S.config.nombre ? hdr(S.config.nombre) + (gdEmail() ? ' <' + gdEmail() + '>' : '') : '';
+  return ['MIME-Version: 1.0', from && gdEmail() ? 'From: ' + from : '', 'To: ' + to, 'Subject: ' + hdr(asunto),
+    'Content-Type: multipart/alternative; boundary="' + b + '"', '',
+    '--' + b, 'Content-Type: text/plain; charset="UTF-8"', 'Content-Transfer-Encoding: base64', '', wrap(b64u8(texto.replace(/\r?\n/g, '\r\n'))),
+    '--' + b, 'Content-Type: text/html; charset="UTF-8"', 'Content-Transfer-Encoding: base64', '', wrap(b64u8(textoAHtml(texto))),
+    '--' + b + '--', ''].filter((x, i)=> !(i === 1 && !x)).join('\r\n');
+}
+async function gmailSend(token, mime){
+  const res = await fetch('https://gmail.googleapis.com/upload/gmail/v1/users/me/messages/send?uploadType=media', { method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'message/rfc822' }, body: mime });
+  if(res.ok) return;
+  let msg = ''; try{ msg = (await res.json()).error.message || ''; }catch(e){}
+  if(res.status === 401){ gmailTok = null; throw Object.assign(new Error('El permiso de Google venció. Vuelve a tocar "Enviar".'), { fatal: true }); }
+  if(res.status === 403 && /not been used|disabled|not enabled/i.test(msg)) throw Object.assign(new Error('La Gmail API no está habilitada en el proyecto de Google Cloud.'), { fatal: true });
+  if(res.status === 403 && /insufficient|scope/i.test(msg)){ gmailTok = null; throw Object.assign(new Error('Falta el permiso para enviar correos.'), { fatal: true }); }
+  if(res.status === 429) throw Object.assign(new Error('Google limitó los envíos por ahora. Intenta más tarde.'), { fatal: true });
+  throw new Error('Gmail (' + res.status + ')' + (msg ? ': ' + msg : ''));
+}
+
+/* ---------- Ventana de envío ---------- */
+function enviadosEsteMes(){ const m = curYm(); return new Set(live('correos').filter(x=> (x.fecha || '').slice(0, 7) === m && x.ok).map(x=> x.socioId)); }
+function openCorreos(ids){
+  const cfg = correoCfg();
+  const st = { soloDeuda: ids ? false : cfg.soloDeuda, sel: null, asunto: cfg.asunto, cuerpo: cfg.cuerpo, ver: null, enviando: false, log: [] };
+  const candidatos = ()=> sociosOrdenados().filter(s=> !socioBaja(s) || cuentaSocio(s).deuda > 0).filter(s=> !ids || ids.includes(s.id)).filter(s=> !st.soloDeuda || cuentaSocio(s).deuda > 0);
+  const ya = enviadosEsteMes();
+  const m = openModal({
+    wide: true, sticky: true,
+    title: ()=> '✉️ Enviar estado de cuenta por correo',
+    body: ()=>{
+      const cs = candidatos();
+      const con = cs.filter(s=> emailValido(s.email)), sin = cs.filter(s=> !emailValido(s.email));
+      if(st.sel === null) st.sel = new Set(con.filter(s=> ids || !ya.has(s.id)).map(s=> s.id));
+      const v = st.ver ? getById('socios', st.ver) : con.find(s=> st.sel.has(s.id)) || con[0];
+      const prev = v ? { a: correoRender(st.asunto, v, correoDatos(v)), c: correoRender(st.cuerpo, v, correoDatos(v)) } : null;
+      return `${st.log.length ? `<div class="note ${st.log.some(x=> !x.ok) ? 'warn' : 'ok'}">${st.enviando ? '⟳ Enviando… ' : ''}${st.log.filter(x=> x.ok).length} enviado(s)${st.log.some(x=> !x.ok) ? ' · ' + st.log.filter(x=> !x.ok).length + ' con error: ' + st.log.filter(x=> !x.ok).map(x=> esc(x.nombre + ' (' + x.err + ')')).join(', ') : ''}</div>` : ''}
+        ${ids ? '' : `<div class="seg" id="ceFil" style="margin-bottom:10px"><button type="button" data-v="1" class="${st.soloDeuda ? 'active' : ''}">Solo socios con deuda</button><button type="button" data-v="0" class="${!st.soloDeuda ? 'active' : ''}">Todos los socios</button></div>`}
+        <div class="toolbar"><b>${st.sel.size}</b>&nbsp;de ${con.length} con correo seleccionados${ya.size && !ids ? ` · <span class="dim small">${ya.size} ya recibieron este mes (desmarcados)</span>` : ''}
+          <button class="btn sm" id="ceAll" style="margin-left:auto">Marcar todos</button><button class="btn sm" id="ceNone">Ninguno</button></div>
+        <div class="table-wrap" style="max-height:30vh;overflow:auto"><table class="t"><tbody>
+          ${con.map(s=>{ const d = cuentaSocio(s).deuda; return `<tr><td style="width:34px"><input type="checkbox" class="ceChk" data-id="${s.id}" ${st.sel.has(s.id) ? 'checked' : ''} style="width:20px;height:20px"></td><td><a href="#" class="ceVer" data-id="${s.id}">${nombreHtml(s, { chip: false })}</a><div class="tiny dim">${esc(s.email)}${ya.has(s.id) ? ' · enviado este mes' : ''}</div></td><td class="r ${d ? 'val bad' : 'dim'}">${d ? clp(d) : 'Al día'}</td></tr>`; }).join('') || '<tr><td class="empty">Nadie con correo en esta lista.</td></tr>'}
+        </tbody></table></div>
+        ${sin.length ? `<div class="note warn small">${sin.length} socio(s) sin correo: ${sin.slice(0, 6).map(s=> esc(s.nombre)).join(', ')}${sin.length > 6 ? '…' : ''}. <a href="#" data-act="pegar-correos">Agregar correos</a></div>` : ''}
+        <details class="adv"><summary>✏️ Editar el mensaje</summary>
+          <label class="f">Asunto<input id="ceAs" value="${esc(st.asunto)}"></label>
+          <label class="f" style="margin-top:8px">Mensaje<textarea id="ceCu" style="min-height:220px">${esc(st.cuerpo)}</textarea></label>
+          <p class="dim tiny">Campos que se reemplazan: {nombre} {primer_nombre} {deuda} {meses} {resumen} {detalle} {plan} {enlace} {cuota} {mes} {fecha} {sindicato}. ${connected() ? '' : '{enlace} queda vacío hasta conectar el repositorio (portal).'}</p>
+          <div class="btn-row"><button class="btn sm" id="ceGuardar">Guardar como plantilla</button><button class="btn sm" id="ceReset">Restaurar texto original</button></div>
+        </details>
+        ${prev ? `<h3>Vista previa · ${esc(v.nombre)}</h3><div class="note" style="white-space:pre-wrap;color:var(--text)"><b>${esc(prev.a)}</b>\n\n${esc(prev.c)}</div>` : ''}
+        <p class="dim tiny">Se envía desde tu Gmail${gdEmail() ? ' (' + esc(gdEmail()) + ')' : ''}, uno por uno. La primera vez Google te pedirá el permiso "Enviar correo electrónico en tu nombre".</p>`;
+    },
+    foot: ()=> `<button class="btn" data-act="close-modal">Cerrar</button><button class="btn primary" id="ceSend" ${st.enviando ? 'disabled' : ''}>✉️ Enviar ${st.sel ? st.sel.size : 0} correo(s)</button>`,
+    onMount: el=>{
+      const keep = ()=>{ const a = $('#ceAs', el), c = $('#ceCu', el); if(a) st.asunto = a.value; if(c) st.cuerpo = c.value; };
+      const redraw = ()=>{ const op = $('details.adv', el) && $('details.adv', el).open; keep(); drawModal(m); if(op) $('details.adv', m.el).open = true; };
+      const f = $('#ceFil', el); if(f) f.onclick = e=>{ const b = e.target.closest('button[data-v]'); if(b){ st.soloDeuda = b.dataset.v === '1'; st.sel = null; redraw(); } };
+      $$('.ceChk', el).forEach(c=> c.onchange = ()=>{ c.checked ? st.sel.add(c.dataset.id) : st.sel.delete(c.dataset.id); redraw(); });
+      $$('.ceVer', el).forEach(a=> a.onclick = e=>{ e.preventDefault(); st.ver = a.dataset.id; redraw(); });
+      $('#ceAll', el).onclick = ()=>{ candidatos().filter(s=> emailValido(s.email)).forEach(s=> st.sel.add(s.id)); redraw(); };
+      $('#ceNone', el).onclick = ()=>{ st.sel.clear(); redraw(); };
+      $('#ceAs', el).oninput = $('#ceCu', el).oninput = ()=>{ keep(); };
+      $('#ceAs', el).onchange = $('#ceCu', el).onchange = ()=> setTimeout(redraw, 0);
+      $('#ceGuardar', el).onclick = ()=>{ keep(); setConfig({ correoAsunto: st.asunto, correoCuerpo: st.cuerpo }, { noRender: true }); toast('✓ Plantilla guardada', 'ok'); };
+      $('#ceReset', el).onclick = ()=>{ st.asunto = CORREO_ASUNTO_DEF; st.cuerpo = CORREO_CUERPO_DEF; drawModal(m); $('details.adv', m.el).open = true; };
+      $('#ceSend', el).onclick = ()=>{
+        keep();
+        const lista = candidatos().filter(s=> st.sel.has(s.id) && emailValido(s.email));
+        if(!lista.length){ toast('No hay destinatarios seleccionados.', 'bad'); return; }
+        // el permiso de Google se pide en el mismo toque
+        getGmailToken().then(async token=>{
+          if(!await confirmar(`¿Enviar ${lista.length} correo(s) con el estado de cuenta?`, 'Enviar')){ return; }
+          st.enviando = true; st.log = []; redraw();
+          for(const s of lista){
+            const d = correoDatos(s);
+            try{
+              await gmailSend(token, mimeCorreo(s.email.trim(), correoRender(st.asunto, s, d), correoRender(st.cuerpo, s, d)));
+              st.log.push({ ok: true, nombre: s.nombre });
+              S.correos.push({ id: uid(), socioId: s.id, email: s.email, fecha: new Date().toISOString(), deuda: d.c.deuda, ok: true, por: yo(), u: now() });
+              st.sel.delete(s.id);
+            }catch(e){
+              st.log.push({ ok: false, nombre: s.nombre, err: e.message });
+              if(e.fatal){ toast('⚠ ' + e.message, 'bad'); break; }
+            }
+            if(modalStack.includes(m)) redraw();
+            await new Promise(r=> setTimeout(r, 400));
+          }
+          st.enviando = false;
+          if(!ids){ S.config.correoUltimoMes = curYm(); S.config.u = now(); }
+          changed({ noRender: true });
+          if(modalStack.includes(m)) redraw();
+          toast(`✓ ${st.log.filter(x=> x.ok).length} correo(s) enviado(s)`, 'ok');
+        }).catch(e=> toast('⚠ ' + e.message, 'bad'));
+      };
+    },
+  });
+}
+ACT['correos'] = ()=> openCorreos(null);
+ACT['correo-socio'] = el=>{
+  const s = getById('socios', el.dataset.id);
+  if(!emailValido(s.email)){ toast('Este socio no tiene correo. Agrégalo en "Editar datos".', 'bad'); return; }
+  openCorreos([s.id]);
+};
+
+/* ---------- Pegar correos en lote ---------- */
+ACT['pegar-correos'] = ()=>{
+  const st = { res: [] };
+  const match = nombre=>{
+    const n = normTxt(nombre).replace(/[^a-z ]/g, ' ').split(/\s+/).filter(Boolean);
+    let best = null, bs = 0;
+    live('socios').forEach(s=>{
+      const t = normTxt(s.nombre).replace(/[^a-z ]/g, ' ').split(/\s+/).filter(Boolean);
+      const sc = t.filter(w=> n.includes(w)).length / Math.max(t.length, 1);
+      if(sc > bs){ bs = sc; best = s; }
+    });
+    return bs >= 0.99 || (best && bs >= 0.5 && normTxt(best.nombre).split(/\s+/).filter(w=> n.includes(w)).length >= 2) ? best : null;
+  };
+  const m = openModal({
+    wide: true,
+    title: ()=> 'Agregar correos de socios',
+    body: ()=> `<p class="dim small">Pega desde Excel una línea por socio con su <b>nombre</b> y su <b>correo</b> (en cualquier orden). Se buscan por nombre.</p>
+      <textarea id="pcTxt" style="min-height:150px" placeholder="Pérez Juana&#9;juana@correo.cl"></textarea>
+      ${st.res.length ? `<div class="table-wrap" style="margin-top:10px;max-height:32vh;overflow:auto"><table class="t"><tbody>${st.res.map(r=> `<tr><td>${esc(r.nombre)}</td><td>${esc(r.email)}</td><td>${r.s ? '→ <b>' + esc(r.s.nombre) + '</b>' : '<span class="chip bad">Sin coincidencia</span>'}</td></tr>`).join('')}</tbody></table></div>` : ''}`,
+    foot: ()=> `<button class="btn" data-act="close-modal">Cancelar</button><button class="btn primary" id="pcOk" ${st.res.some(r=> r.s) ? '' : 'disabled'}>Guardar ${st.res.filter(r=> r.s).length} correo(s)</button>`,
+    onMount: el=>{
+      const t = $('#pcTxt', el);
+      if(st.txt) t.value = st.txt;
+      t.onchange = ()=>{
+        st.txt = t.value;
+        st.res = t.value.split(/\r?\n/).map(l=>{ const em = (l.match(/[^\s;,\t<>]+@[^\s;,\t<>]+\.[a-z]{2,}/i) || [])[0]; if(!em) return null; const nombre = l.replace(em, ' ').replace(/[\t;,<>|]+/g, ' ').trim(); return nombre ? { nombre, email: em, s: match(nombre) } : null; }).filter(Boolean);
+        setTimeout(()=> drawModal(m), 0);
+      };
+      $('#pcOk', el).onclick = ()=>{
+        const t0 = now(); let n = 0;
+        st.res.filter(r=> r.s).forEach(r=>{ const s = S.socios.find(x=> x.id === r.s.id); s.email = r.email; s.u = t0; n++; });
+        closeModal(); changed(); refreshOpenModal(); toast(`✓ ${n} correo(s) guardados`, 'ok');
+      };
+    },
+  });
+};
+
+/* ---------- Integración en vistas ---------- */
+const _vSocios = VIEWS.socios, _mSocios = VIEWS.socios.mount;
+VIEWS.socios = function(){
+  const h = _vSocios();
+  const conMail = live('socios').filter(s=> !socioBaja(s) && emailValido(s.email)).length;
+  const bar = `<div class="toolbar"><button class="btn sm" data-act="correos">✉️ Enviar estados de cuenta por correo</button><button class="btn sm" data-act="pegar-correos">📋 Pegar correos</button><span class="dim small">${conMail} socio(s) activos con correo</span></div>`;
+  const i = h.indexOf('<div class="toolbar">');
+  return i > 0 ? h.slice(0, i) + bar + h.slice(i) : h;
+};
+VIEWS.socios.mount = _mSocios;
+
+/* Recordatorio mensual en Inicio */
+function correoPendienteMes(){
+  const cfg = correoCfg();
+  if(!cfg.diaAuto) return false;
+  if(new Date().getDate() < cfg.diaAuto) return false;
+  return S.config.correoUltimoMes !== curYm();
+}
+const _vInicio2 = VIEWS.inicio;
+VIEWS.inicio = function(){
+  const h = _vInicio2();
+  if(!correoPendienteMes()) return h;
+  const n = live('socios').filter(s=> !socioBaja(s) && emailValido(s.email) && (!correoCfg().soloDeuda || cuentaSocio(s).deuda > 0)).length;
+  return `<div class="note warn" style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span>✉️ Toca enviar los estados de cuenta de <b>${esc(mesLabel(curYm()))}</b> (${n} socio(s) con correo).</span><button class="btn sm primary" data-act="correos">Revisar y enviar</button></div>` + h;
+};
+let _correoAutoAbierto = false;
+const _render0 = renderView;
+renderView = function(){
+  _render0();
+  if(!_correoAutoAbierto && currentTab === 'inicio' && correoCfg().abrirSolo && correoPendienteMes() && !modalStack.length){ _correoAutoAbierto = true; setTimeout(()=> openCorreos(null), 600); }
+};
+
+/* Configuración en Ajustes */
+function correoCardHtml(){
+  const c = correoCfg();
+  const ult = live('correos').filter(x=> x.ok).sort((a, b)=> (b.fecha || '').localeCompare(a.fecha || ''))[0];
+  return `<div class="card"><h2>Correos a los socios</h2>
+    <p class="dim small">Envía a cada socio su estado de cuenta desde tu Gmail. ${ult ? 'Último envío: ' + fdatetime(Date.parse(ult.fecha)) + '.' : 'Aún no se ha enviado ninguno.'}</p>
+    <div class="grid2">
+      <label class="f">Recordatorio mensual: avisar desde el día<select id="ccDia"><option value="0">Sin recordatorio</option>${Array.from({ length: 28 }, (_, i)=> `<option value="${i + 1}" ${c.diaAuto === i + 1 ? 'selected' : ''}>${i + 1}</option>`).join('')}</select></label>
+      <label class="f">Enviar a<select id="ccQuien"><option value="1" ${c.soloDeuda ? 'selected' : ''}>Solo socios con deuda</option><option value="0" ${!c.soloDeuda ? 'selected' : ''}>Todos los socios</option></select></label>
+    </div>
+    <label class="check" style="margin-top:8px"><input type="checkbox" id="ccAbrir" ${c.abrirSolo ? 'checked' : ''}> Abrir la ventana de envío sola al entrar a la app ese día</label>
+    <div class="btn-row" style="margin-top:10px"><button class="btn primary sm" data-act="correos">✉️ Enviar ahora</button><button class="btn sm" data-act="pegar-correos">📋 Pegar correos</button></div>
+  </div>`;
+}
+const _vAj = VIEWS.ajustes, _mAj = VIEWS.ajustes.mount;
+VIEWS.ajustes = function(){ const h = _vAj(); const i = h.indexOf('<div class="card">', 10); return i > 0 ? h.slice(0, i) + correoCardHtml() + h.slice(i) : h + correoCardHtml(); };
+VIEWS.ajustes.mount = function(v){
+  if(_mAj) _mAj(v);
+  const d = $('#ccDia', v), q = $('#ccQuien', v), a = $('#ccAbrir', v);
+  if(d) d.onchange = ()=> setConfig({ correoDia: Number(d.value) || 0 }, { noRender: true });
+  if(q) q.onchange = ()=> setConfig({ correoSoloDeuda: q.value === '1' }, { noRender: true });
+  if(a) a.onchange = ()=> setConfig({ correoAbrirSolo: a.checked }, { noRender: true });
+};
 
 /* =====================================================================
    GOOGLE DRIVE (sincronización con tu cuenta de Google)
