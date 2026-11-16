@@ -216,13 +216,16 @@
     const proxIdx = c.due + 1;
     const pm = MESES[proxIdx % 12]; const prox = pm.charAt(0).toUpperCase() + pm.slice(1) + ' · vence el ' + (p.dv || 10);
     const desc = p.desc || [];
-    const cm = session.comun, mt = p.mt || [];
-    const avs = avisosVig(cm);
-    const tabs = [['cuotas', '💵 Cuotas']];
+    const V = Object.assign({ deuda: 1, grilla: 1, pendiente: 1, pagos: 1, cobros: 1, plan: 1, desc: 1, avisos: 1, actas: 1, acuerdos: 1, mistareas: 1 }, p.ver || {});
+    const cm = session.comun, mt = V.mistareas ? (p.mt || []) : [];
+    const avs = V.avisos ? avisosVig(cm) : [];
+    const verCuotas = V.deuda || V.grilla || V.pendiente || V.pagos || V.cobros || V.plan || V.desc;
+    const tabs = verCuotas ? [['cuotas', '💵 Cuotas']] : [];
     if(avs.length) tabs.push(['avisos', '📢 Avisos']);
-    if(cm && cm.actas.length) tabs.push(['actas', '📄 Actas']);
-    if((cm && cm.tareas.length) || mt.length) tabs.push(['tareas', '✅ Acuerdos']);
-    if(!tabs.some(t=> t[0] === session.tab)) session.tab = 'cuotas';
+    if(V.actas && cm && cm.actas.length) tabs.push(['actas', '📄 Actas']);
+    if((V.acuerdos && cm && cm.tareas.length) || mt.length) tabs.push(['tareas', '✅ Acuerdos']);
+    if(!tabs.length) tabs.push(['cuotas', '💵 Cuotas']);
+    if(!tabs.some(t=> t[0] === session.tab)) session.tab = tabs[0][0];
     const head = `${brand()}
     <div class="card hero"><div class="dim small">${session.tab === 'cuotas' ? 'Estado de cuenta de' : 'Socio(a)'}</div><h1>${esc(p.nombre)}</h1>${p.rut ? `<div class="dim small">${esc(p.rut)}</div>` : ''}${p.fin ? `<div class="small" style="margin-top:4px"><span class="chip neutral">Retiro: ${esc(mesLabel(p.fin))}</span></div>` : ''}</div>
     ${tabs.length > 1 ? `<div class="ptabs">${tabs.map(t=> `<button type="button" data-tab="${t[0]}" class="${t[0] === session.tab ? 'on' : ''}">${t[1]}</button>`).join('')}</div>` : ''}`;
@@ -238,32 +241,33 @@
     app.innerHTML = `${head}
     ${proxAv ? `<div class="card" style="cursor:pointer" id="proxAv"><div class="row" style="padding:0;border:none">${dchip(proxAv.f)}<div class="main" style="flex:1"><div class="sub">Próximo aviso · ${cuando(proxAv.f)}</div><div class="title">${(TAV[proxAv.ti] || TAV.comunicado)[0]} ${esc(proxAv.t)}</div></div><span class="dim">›</span></div></div>` : ''}
     ${mt.filter(t=> t.e !== 'cumplida').length ? `<div class="card"><h2>📌 Tienes ${mt.filter(t=> t.e !== 'cumplida').length} tarea(s) a tu cargo</h2>${mt.filter(t=> t.e !== 'cumplida').slice(0, 3).map(tareaRow).join('')}</div>` : ''}
-    ${c.deuda > 0
+    ${!verCuotas ? '<div class="card msg"><div class="icon">📭</div><div class="dim">La directiva aún no publica información en este portal.</div></div>' : ''}
+    ${!V.deuda ? '' : c.deuda > 0
       ? `<div class="status bad"><div class="ico">⚠️</div><div><h2>Tienes ${clp(c.deuda)} pendiente</h2><div class="small">${c.meses.length ? (c.meses.length === 1 ? 'Adeudas 1 mes: ' : `Adeudas ${c.meses.length} meses: `) + esc(c.meses.map(m=> mesLabel(m, true)).join(', ')) : 'Tienes cobros pendientes.'}</div></div></div>`
       : `<div class="status ok"><div class="ico">✅</div><div><h2>¡Estás al día!</h2><div class="small">No tienes cuotas vencidas pendientes.</div></div></div>`}
-    <div class="tiles">
+    ${!V.deuda ? '' : `<div class="tiles">
       <div class="tile"><div class="num ${c.deuda ? 'bad' : 'ok'}">${clp(c.deuda)}</div><div class="lbl">Deuda vencida</div></div>
       <div class="tile"><div class="num">${clp(p.cuota)}</div><div class="lbl">Cuota mensual</div></div>
       <div class="tile"><div class="num">${c.meses.length}</div><div class="lbl">Meses adeudados</div></div>
       <div class="tile"><div class="num" style="font-size:1.05rem">${esc(prox)}</div><div class="lbl">Próxima cuota</div></div>
-    </div>
-    <div class="card">
+    </div>`}
+    ${!V.grilla ? '' : `<div class="card">
       <div class="yearbar"><button class="ybtn" id="yPrev" ${y <= minY ? 'disabled' : ''} aria-label="Año anterior">‹</button><b>Cuotas ${y}</b><button class="ybtn" id="yNext" ${y >= maxY ? 'disabled' : ''} aria-label="Año siguiente">›</button></div>
       <div class="months">${grid.map(m=> `<div class="mcell ${m.st}"><b>${MESES_C[Number(m.ym.slice(5)) - 1]}</b>${esc(m.txt)}</div>`).join('')}</div>
       <div class="legend"><span class="chip ok">Pagado</span><span class="chip warn">Parcial</span><span class="chip bad">Adeuda</span><span class="chip info">Por vencer</span><span class="chip primary">Adelantado</span><span class="chip neutral">Exento</span></div>
-    </div>
-    ${c.pend.length ? `<div class="card"><h2>Detalle de lo pendiente</h2>${c.pend.map(it=> `<div class="row"><div class="main"><div class="title">${esc(it.c)}</div>${it.p ? `<div class="sub">Abonado ${clp(it.p)} de ${clp(it.mo)}</div>` : ''}</div><div class="val bad">${clp(it.mo - it.p)}</div></div>`).join('')}</div>` : ''}
-    <div class="card"><h2>Mis pagos</h2>${p.pagos.length ? list(p.pagos, x=> `<div class="row"><div class="main"><div class="title">${fdate(x.f)}</div><div class="sub">${esc(x.me || '')}</div></div><div class="val ok">${clp(x.mo)}</div></div>`, 6) : '<div class="dim">Aún no hay pagos registrados.</div>'}</div>
-    ${extras.length ? `<div class="card"><h2>Cobros extraordinarios</h2>${extras.map(it=> `<div class="row"><div class="main"><div class="title">${esc(it.c)}</div><div class="sub">${esc(mesLabel(it.m))}</div></div><div style="text-align:right"><div class="val">${clp(it.mo)}</div>${it.e === 'pagado' ? '<span class="chip ok">Pagado</span>' : it.e === 'parcial' ? '<span class="chip warn">Parcial</span>' : it.venc ? '<span class="chip bad">Pendiente</span>' : '<span class="chip info">Por vencer</span>'}</div></div>`).join('')}</div>` : ''}
-    ${p.plan ? `<div class="card"><h2>🤝 Mi plan de pago</h2><div class="row"><div class="main"><div class="title">${p.plan.p} de ${p.plan.n} cuotas descontadas</div><div class="sub">Cuotas de ${clp(p.plan.mo)}${p.plan.inc ? ' + cuota mensual' : ''}, por descuento por planilla · termina en ${esc(mesLabel(p.plan.fin))}</div></div><div class="val">${clp(p.plan.saldo)}</div></div><div class="dim small">El monto de la derecha es lo que falta del plan. Próximo descuento: <b>${clp(p.plan.prox)}</b>.</div></div>` : ''}
-    ${desc.length ? `<div class="card"><h2>Descuentos</h2>${desc.map(d=> `<div class="row"><div class="main"><div class="title">${esc(d.c)}</div><div class="sub">${esc(mesLabel(d.m))}</div></div><div class="val ok">−${clp(d.mo)}</div></div>`).join('')}</div>` : ''}
+    </div>`}
+    ${V.pendiente && c.pend.length ? `<div class="card"><h2>Detalle de lo pendiente</h2>${c.pend.map(it=> `<div class="row"><div class="main"><div class="title">${esc(it.c)}</div>${it.p ? `<div class="sub">Abonado ${clp(it.p)} de ${clp(it.mo)}</div>` : ''}</div><div class="val bad">${clp(it.mo - it.p)}</div></div>`).join('')}</div>` : ''}
+    ${!V.pagos ? '' : `<div class="card"><h2>Mis pagos</h2>${p.pagos.length ? list(p.pagos, x=> `<div class="row"><div class="main"><div class="title">${fdate(x.f)}</div><div class="sub">${esc(x.me || '')}</div></div><div class="val ok">${clp(x.mo)}</div></div>`, 6) : '<div class="dim">Aún no hay pagos registrados.</div>'}</div>`}
+    ${V.cobros && extras.length ? `<div class="card"><h2>Cobros extraordinarios</h2>${extras.map(it=> `<div class="row"><div class="main"><div class="title">${esc(it.c)}</div><div class="sub">${esc(mesLabel(it.m))}</div></div><div style="text-align:right"><div class="val">${clp(it.mo)}</div>${it.e === 'pagado' ? '<span class="chip ok">Pagado</span>' : it.e === 'parcial' ? '<span class="chip warn">Parcial</span>' : it.venc ? '<span class="chip bad">Pendiente</span>' : '<span class="chip info">Por vencer</span>'}</div></div>`).join('')}</div>` : ''}
+    ${V.plan && p.plan ? `<div class="card"><h2>🤝 Mi plan de pago</h2><div class="row"><div class="main"><div class="title">${p.plan.p} de ${p.plan.n} cuotas descontadas</div><div class="sub">Cuotas de ${clp(p.plan.mo)}${p.plan.inc ? ' + cuota mensual' : ''}, por descuento por planilla · termina en ${esc(mesLabel(p.plan.fin))}</div></div><div class="val">${clp(p.plan.saldo)}</div></div><div class="dim small">El monto de la derecha es lo que falta del plan. Próximo descuento: <b>${clp(p.plan.prox)}</b>.</div></div>` : ''}
+    ${V.desc && desc.length ? `<div class="card"><h2>Descuentos</h2>${desc.map(d=> `<div class="row"><div class="main"><div class="title">${esc(d.c)}</div><div class="sub">${esc(mesLabel(d.m))}</div></div><div class="val ok">−${clp(d.mo)}</div></div>`).join('')}</div>` : ''}
     <div class="note">Información actualizada el ${esc(fdatetime(p.generado || session.data.generado))}. Los pagos recientes pueden tardar en aparecer.<br>Los pagos se imputan primero a la deuda más antigua. Ante cualquier duda, consulta con la directiva.</div>
     ${salir}`;
     wire();
     const pa = document.getElementById('proxAv'); if(pa) pa.onclick = ()=>{ session.tab = 'avisos'; render(); window.scrollTo(0, 0); };
     const yp = document.getElementById('yPrev'), yn = document.getElementById('yNext');
-    yp.onclick = ()=>{ session.year--; render(); };
-    yn.onclick = ()=>{ session.year++; render(); };
+    if(yp) yp.onclick = ()=>{ session.year--; render(); };
+    if(yn) yn.onclick = ()=>{ session.year++; render(); };
   }
   /* ---------- Actas y acuerdos ---------- */
   const EST = { pendiente: ['Pendiente', '', 'neutral'], curso: ['En curso', '⏳', 'info'], cumplida: ['Cumplida', '✓', 'ok'] };

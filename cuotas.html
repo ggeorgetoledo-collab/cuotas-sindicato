@@ -298,7 +298,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 </script>
 <script>
-const APP_VERSION = "20261116151649";
+const APP_VERSION = "20261116205445";
 'use strict';
 /* =====================================================================
    CUOTAS SINDICALES — administración de cuotas y deuda de socios
@@ -3986,6 +3986,7 @@ async function publicarComun(){
     tareas: live('tareas').filter(t=> t.publico).map(tareaPortal),
     avisos: typeof avisosPortal === 'function' ? avisosPortal() : [],
   };
+  if(typeof filtrarComun === 'function') filtrarComun(data);
   const hash = hex(await shaBytes(JSON.stringify(data) + gkB64())).slice(0, 20);
   if(hash === lsGet('cs_comun_hash::' + conn().fileId, '')) return;
   const key = await gkKey(gkB64());
@@ -4892,6 +4893,78 @@ const _schedDr = scheduleSync;
 scheduleSync = function(d){ _schedDr(d); drProgramar(); };
 setTimeout(()=>{ drPintar(); drProgramar(4000); }, 2000);
 setInterval(()=>{ if(document.visibilityState === 'visible') drProgramar(1000); }, 600000);
+
+/* =====================================================================
+   QUÉ SE MUESTRA EN EL PORTAL DE SOCIOS
+   Lo que se desmarca no solo se oculta: tampoco se publica.
+   ===================================================================== */
+const PV_GRUPOS = [
+  ['Cuotas y deuda', [
+    ['deuda', 'Estado de deuda (al día / monto pendiente) y resumen'],
+    ['grilla', 'Calendario de cuotas por mes'],
+    ['pendiente', 'Detalle de lo pendiente'],
+    ['pagos', 'Historial de pagos'],
+    ['cobros', 'Cobros extraordinarios'],
+    ['plan', 'Plan de pago'],
+    ['desc', 'Descuentos y condonaciones'],
+  ]],
+  ['Gestión', [
+    ['avisos', 'Avisos y comunicados'],
+    ['actas', 'Actas publicadas'],
+    ['archivos', 'Archivos adjuntos de las actas (PDF, fotos)'],
+    ['acuerdos', 'Acuerdos y tareas públicas'],
+    ['mistareas', 'Tareas a cargo del propio socio'],
+  ]],
+];
+function pvCfg(){ const v = {}; PV_GRUPOS.forEach(g=> g[1].forEach(([k])=> v[k] = !S.config.portalVer || S.config.portalVer[k] !== false)); return v; }
+
+const _bppV = buildPortalPayload;
+buildPortalPayload = function(s){
+  const p = _bppV(s), v = pvCfg();
+  p.ver = {}; Object.keys(v).forEach(k=> p.ver[k] = v[k] ? 1 : 0);
+  if(!v.pagos) p.pagos = [];
+  if(!v.plan) p.plan = null;
+  if(!v.desc) p.desc = [];
+  if(!v.mistareas) delete p.mt;
+  if(!v.avisos && !v.actas && !v.acuerdos) delete p.gk;
+  if(!(v.deuda || v.grilla || v.pendiente || v.cobros)) p.items = [];
+  return p;
+};
+function filtrarComun(data){
+  const v = pvCfg();
+  if(!v.actas) data.actas = [];
+  else if(!v.archivos) data.actas.forEach(a=> a.ar = []);
+  if(!v.acuerdos) data.tareas = [];
+  if(!v.avisos) data.avisos = [];
+}
+
+function pvCardHtml(){
+  const v = pvCfg();
+  return `<div class="card">
+    <h2>¿Qué se muestra en el portal?</h2>
+    <p class="dim small">Marca lo que los socios pueden ver con su QR. Lo que desmarques no se publica. Los socios nunca ven notas internas ni datos de otros socios.</p>
+    ${PV_GRUPOS.map(([t, it])=> `<h3 style="margin:12px 0 4px">${t}</h3>${it.map(([k, l])=> `<label class="check" style="display:flex;margin:6px 0"><input type="checkbox" class="pvChk" data-k="${k}" ${v[k] ? 'checked' : ''}> ${l}</label>`).join('')}`).join('')}
+    <p class="dim tiny" style="margin-top:10px">Los cambios se aplican al publicar el portal${S.config.portalAuto ? ' (se publica solo en unos segundos)' : ''}.</p>
+  </div>`;
+}
+const _vPortV = VIEWS.portal, _mPortV = VIEWS.portal.mount;
+VIEWS.portal = function(){
+  const h = _vPortV();
+  const i = h.indexOf('<h2>¿Qué ve el socio?</h2>');
+  if(i < 0) return h + pvCardHtml();
+  const ini = h.lastIndexOf('<div class="card">', i);
+  return h.slice(0, ini) + pvCardHtml();
+};
+VIEWS.portal.mount = function(v){
+  if(_mPortV) _mPortV(v);
+  $$('.pvChk', v).forEach(ch=> ch.onchange = ()=>{
+    const cur = Object.assign({}, S.config.portalVer || {});
+    cur[ch.dataset.k] = ch.checked;
+    setConfig({ portalVer: cur }, { noRender: true });
+    if(S.config.portalAuto && connected()) schedulePortal();
+    toast(ch.checked ? '✓ Se mostrará en el portal' : 'Ya no se mostrará en el portal', 'ok');
+  });
+};
 
 </script>
 </body>
