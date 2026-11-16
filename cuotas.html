@@ -298,7 +298,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 </script>
 <script>
-const APP_VERSION = "20261116151227";
+const APP_VERSION = "20261116151649";
 'use strict';
 /* =====================================================================
    CUOTAS SINDICALES — administración de cuotas y deuda de socios
@@ -4650,8 +4650,9 @@ renderView();
    puede compartir con la directiva):
      · Actas: el acta en Word y sus archivos adjuntos (PDF, fotos)
      · Planillas de abonos: el Word para firmas
-     · Respaldos: una vez al día, Excel (cuotas, socios, gastos, ingresos)
-       y el respaldo completo (.json)
+     · Respaldos: "Respaldo actual" (Excel y respaldo completo) que se
+       actualiza en el mismo archivo cuando hay cambios, y una copia fija
+       por mes en "Mensuales" 
    Sube el equipo de quien conectó la carpeta. Google entrega permisos por
    1 hora: si vencen, basta un toque en "Subir a Drive".
    ===================================================================== */
@@ -4747,7 +4748,10 @@ function drPendientes(){
   const vivos = new Set(live('actas').flatMap(a=> ['acta:' + a.id].concat((a.archivos || []).map(f=> 'arch:' + f.id))));
   S.drivedocs.filter(x=> !x.del && /^(acta|arch):/.test(x.id) && !vivos.has(x.id)).forEach(x=> p.push({ k: x.id, tipo: 'borrar', fid: x.fid }));
   live('nominas').forEach(nm=>{ const d = drDoc('nom:' + nm.id); if(!d || d.sig !== String(nm.u)) p.push({ k: 'nom:' + nm.id, sig: String(nm.u), tipo: 'nomina', nm, fid: d && d.fid }); });
-  if(!drDoc('resp:' + todayISO())) p.push({ k: 'resp:' + todayISO(), tipo: 'respaldo' });
+  const sig = drFirma(), ra = drDoc('ract');
+  if(!ra || (ra.sig !== sig && Date.now() - (ra.at || 0) > DR_ESPERA)) p.push({ k: 'ract', tipo: 'ractual', sig });
+  const mes = todayISO().slice(0, 7); if(!drDoc('rmes:' + mes)) p.push({ k: 'rmes:' + mes, tipo: 'rmes', mes });
+  S.drivedocs.filter(x=> !x.del && /^resp:/.test(x.id)).forEach(x=> p.push({ k: x.id, tipo: 'borrar', fid: x.fid }));
   return p;
 }
 
@@ -4773,8 +4777,10 @@ async function drEjecutar(manual){
         } else if(it.tipo === 'nomina'){
           const [f] = await capturar(()=> nominaWord(it.nm));
           if(f){ const fid = await drSubir(f.blob, limpio(f.name.replace(/\.docx$/, '')) + '.docx', c.sub.planillas, it.fid); drMarcar(it.k, fid, it.sig); }
-        } else if(it.tipo === 'respaldo'){
-          await drRespaldo(c);
+        } else if(it.tipo === 'ractual'){
+          await drRespaldoActual(c, it.sig);
+        } else if(it.tipo === 'rmes'){
+          await drRespaldoMes(c, it.mes);
         }
       }catch(e){
         if(e.auth){ drEstado.st = 'auth'; drPintar(); drCorriendo = null; return; }
@@ -4788,25 +4794,36 @@ async function drEjecutar(manual){
   })();
   try{ await drCorriendo; } finally { drCorriendo = null; }
 }
-async function drRespaldo(c){
-  const hoy = todayISO();
+function drFirma(){ return COLS.filter(c=> c !== 'drivedocs' && c !== 'correos').map(c=> S[c].length + '.' + S[c].reduce((m, x)=> Math.max(m, x.u || 0), 0)).join('|') + '|' + (S.config.u || 0); }
+const DR_ESPERA = 30 * 60000;
+const DR_FIJOS = [[/^respaldo-/, 'Respaldo completo.json'], [/^cuotas-/, 'Cuotas y pagos.xlsx'], [/^socios-/, 'Socios e historial.xlsx'], [/^gastos-/, 'Gastos ' + new Date().getFullYear() + '.xlsx'], [/^ingresos-/, 'Ingresos ' + new Date().getFullYear() + '.xlsx']];
+async function drArchivosRespaldo(){
   const anio = String(new Date().getFullYear()), fa = ui.finAnio;
-  const archivos = await capturar(async ()=>{
+  return capturar(async ()=>{
     ACT['respaldo']();
     await ACT['excel']();
     await ACT['excel-socios']();
     ui.finAnio = anio;
     try{ await ACT['mv-excel']({ dataset: { col: 'gastos' } }); await ACT['mv-excel']({ dataset: { col: 'ingresos' } }); } finally { ui.finAnio = fa; }
   });
-  const sub = await drCrearCarpeta('Respaldo ' + hoy, c.sub.respaldos);
-  for(const f of archivos) await drSubir(f.blob, f.name, sub.id);
-  drMarcar('resp:' + hoy, sub.id, '1');
-  // conserva los últimos 30 días y el primer respaldo de cada mes
-  const lim = new Date(Date.now() - DR_DIAS * 86400000).toISOString().slice(0, 10);
-  const resp = S.drivedocs.filter(x=> !x.del && /^resp:/.test(x.id)).sort((a, b)=> a.id.localeCompare(b.id));
-  const primeros = new Set(); const vistos = new Set();
-  resp.forEach(x=>{ const m = x.id.slice(5, 12); if(!vistos.has(m)){ vistos.add(m); primeros.add(x.id); } });
-  for(const x of resp){ if(x.id.slice(5) < lim && !primeros.has(x.id)){ try{ await drPapelera(x.fid); drBorrarMarca(x.id); }catch(e){} } }
+}
+async function drSubcarpeta(k, nombre, padre){ const d = drDoc(k); if(d) return d.fid; const f = await drCrearCarpeta(nombre, padre); drMarcar(k, f.id, '1'); return f.id; }
+/* Respaldo actual: mismos archivos, se reemplaza su contenido (Drive guarda las versiones anteriores) */
+async function drRespaldoActual(c, sig){
+  const dir = await drSubcarpeta('ractdir', 'Respaldo actual', c.sub.respaldos);
+  for(const f of await drArchivosRespaldo()){
+    const fijo = DR_FIJOS.find(([re])=> re.test(f.name)); if(!fijo) continue;
+    const k = 'ract:' + fijo[1].split(' ')[0].toLowerCase(), d = drDoc(k);
+    const fid = await drSubir(f.blob, fijo[1], dir, d && d.fid); drMarcar(k, fid, '1');
+  }
+  drMarcar('ract', dir, sig, { at: Date.now() });
+}
+/* Copia fija del mes (historial) */
+async function drRespaldoMes(c, mes){
+  const dir = await drSubcarpeta('rmesdir', 'Mensuales', c.sub.respaldos);
+  const sub = await drCrearCarpeta('Respaldo ' + mes, dir);
+  for(const f of await drArchivosRespaldo()) await drSubir(f.blob, f.name, sub.id);
+  drMarcar('rmes:' + mes, sub.id, '1');
 }
 function drProgramar(ms){ clearTimeout(drTimer); if(!drCfg() || !drEsDueno() || !drTokOk()) return; drTimer = setTimeout(()=> drEjecutar(false), ms == null ? 15000 : ms); }
 
@@ -4854,10 +4871,10 @@ function drEstadoHtml(){
 function carpetaCardHtml(){
   const c = drCfg();
   if(!c) return `<div class="card"><h2>📁 Carpeta del sindicato en Google Drive</h2>
-    <p class="dim small">Crea una carpeta en <b>tu</b> Google Drive ("Mi unidad") donde la app sube sola: las <b>actas</b> en Word con sus PDF y fotos, las <b>planillas de abonos</b>, y un <b>respaldo diario</b> en Excel y completo. Después la compartes con la directiva desde Drive.</p>
+    <p class="dim small">Crea una carpeta en <b>tu</b> Google Drive ("Mi unidad") donde la app sube sola: las <b>actas</b> en Word con sus PDF y fotos, las <b>planillas de abonos</b>, y un <b>respaldo</b> en Excel y completo que se mantiene al día. Después la compartes con la directiva desde Drive.</p>
     <div class="btn-row"><button class="btn primary" data-act="dr-conectar">📁 Crear carpeta y conectar</button></div></div>`;
   return `<div class="card"><h2>📁 Carpeta del sindicato en Google Drive</h2>
-    <p class="small">Carpeta de <b>${esc(c.email)}</b>: <i>Actas</i>, <i>Planillas de abonos</i> y <i>Respaldos</i> (uno por día; se guardan 30 días y el primero de cada mes).</p>
+    <p class="small">Carpeta de <b>${esc(c.email)}</b>: <i>Actas</i>, <i>Planillas de abonos</i> y <i>Respaldos</i> (<i>Respaldo actual</i>, que se actualiza en los mismos archivos cuando hay cambios, y una copia fija por mes en <i>Mensuales</i>).</p>
     <div id="drBox">${drEstadoHtml()}</div>
     <div class="btn-row"><a class="btn" href="${esc(c.url || ('https://drive.google.com/drive/folders/' + c.id))}" target="_blank" rel="noopener">📂 Abrir carpeta</a>${drEsDueno() || !drEmail() ? '<button class="btn primary" data-act="dr-subir">⟳ Subir ahora</button>' : ''}</div>
     <p class="dim tiny" style="margin-top:8px">Para compartirla: ábrela, toca <b>Compartir</b> y agrega los correos de la directiva como <b>Lectores</b> (o Editores). El respaldo completo (.json) no va cifrado: compártela solo con la directiva.</p>
