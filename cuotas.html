@@ -1226,6 +1226,7 @@ function fichaBody(id){
     ${(()=>{ const pl = planActivoDe(id); return pl ? `<button class="btn" data-act="ver-plan" data-id="${pl.id}">🤝 Plan de pago (${planResumen(pl).pagadas}/${pl.cuotas})</button>` : (c.deuda > 0 ? `<button class="btn" data-act="nuevo-plan" data-id="${id}">🤝 Crear plan de pago</button>` : ''); })()}
     <button class="btn" data-act="tarjeta" data-id="${id}">🪪 ${S.config.portalPin ? 'Tarjeta y PIN' : 'Tarjeta QR'}</button>
     <button class="btn" data-act="correo-socio" data-id="${id}">✉️ Enviar por correo</button>
+    <button class="btn" data-act="wa-socio" data-id="${id}">💬 WhatsApp</button>
     <button class="btn" data-act="print-estado" data-id="${id}">🖨️ Estado de cuenta</button>
     <button class="btn" data-act="editar-socio" data-id="${id}">✏️ Editar datos</button>
     ${s.mesTermino ? `<button class="btn" data-act="reincorporar" data-id="${id}">↩️ Reincorporar</button>` : `<button class="btn" data-act="suspender" data-id="${id}">${s.suspDesde ? '⏸️ Suspensión' : '⏸️ Suspender'}</button><button class="btn danger" data-act="dar-baja" data-id="${id}">⛔ Dar de baja</button>`}
@@ -2954,7 +2955,7 @@ async function gmailSend(token, mime){
 }
 
 /* ---------- Ventana de envío ---------- */
-function enviadosEsteMes(){ const m = curYm(); return new Set(live('correos').filter(x=> (x.fecha || '').slice(0, 7) === m && x.ok).map(x=> x.socioId)); }
+function enviadosEsteMes(canal){ const m = curYm(); return new Set(live('correos').filter(x=> (x.fecha || '').slice(0, 7) === m && x.ok && (x.canal || 'correo') === (canal || 'correo')).map(x=> x.socioId)); }
 function openCorreos(ids){
   const cfg = correoCfg();
   const st = { soloDeuda: ids ? false : cfg.soloDeuda, sel: null, asunto: cfg.asunto, cuerpo: cfg.cuerpo, ver: null, enviando: false, log: [] };
@@ -3053,23 +3054,23 @@ ACT['pegar-correos'] = ()=>{
   };
   const m = openModal({
     wide: true,
-    title: ()=> 'Agregar correos de socios',
-    body: ()=> `<p class="dim small">Pega desde Excel una línea por socio con su <b>nombre</b> y su <b>correo</b> (en cualquier orden). Se buscan por nombre.</p>
+    title: ()=> 'Agregar correos y teléfonos de socios',
+    body: ()=> `<p class="dim small">Pega desde Excel una línea por socio con su <b>nombre</b> y su <b>correo</b> y/o <b>teléfono</b> (en cualquier orden). Se buscan por nombre.</p>
       <textarea id="pcTxt" style="min-height:150px" placeholder="Pérez Juana&#9;juana@correo.cl"></textarea>
-      ${st.res.length ? `<div class="table-wrap" style="margin-top:10px;max-height:32vh;overflow:auto"><table class="t"><tbody>${st.res.map(r=> `<tr><td>${esc(r.nombre)}</td><td>${esc(r.email)}</td><td>${r.s ? '→ <b>' + esc(r.s.nombre) + '</b>' : '<span class="chip bad">Sin coincidencia</span>'}</td></tr>`).join('')}</tbody></table></div>` : ''}`,
+      ${st.res.length ? `<div class="table-wrap" style="margin-top:10px;max-height:32vh;overflow:auto"><table class="t"><tbody>${st.res.map(r=> `<tr><td>${esc(r.nombre)}</td><td>${esc([r.email, r.fono].filter(Boolean).join(' · '))}</td><td>${r.s ? '→ <b>' + esc(r.s.nombre) + '</b>' : '<span class="chip bad">Sin coincidencia</span>'}</td></tr>`).join('')}</tbody></table></div>` : ''}`,
     foot: ()=> `<button class="btn" data-act="close-modal">Cancelar</button><button class="btn primary" id="pcOk" ${st.res.some(r=> r.s) ? '' : 'disabled'}>Guardar ${st.res.filter(r=> r.s).length} correo(s)</button>`,
     onMount: el=>{
       const t = $('#pcTxt', el);
       if(st.txt) t.value = st.txt;
       t.onchange = ()=>{
         st.txt = t.value;
-        st.res = t.value.split(/\r?\n/).map(l=>{ const em = (l.match(/[^\s;,\t<>]+@[^\s;,\t<>]+\.[a-z]{2,}/i) || [])[0]; if(!em) return null; const nombre = l.replace(em, ' ').replace(/[\t;,<>|]+/g, ' ').trim(); return nombre ? { nombre, email: em, s: match(nombre) } : null; }).filter(Boolean);
+        st.res = t.value.split(/\r?\n/).map(l=>{ const em = (l.match(/[^\s;,\t<>]+@[^\s;,\t<>]+\.[a-z]{2,}/i) || [])[0] || ''; let rest = em ? l.replace(em, ' ') : l; const tm = (rest.match(/\+?\(?\d[\d\s().-]{7,}\d/) || [])[0] || ''; const fono = tm && normFono(tm) ? tm.trim() : ''; if(fono) rest = rest.replace(tm, ' '); if(!em && !fono) return null; const nombre = rest.replace(/[\t;,<>|]+/g, ' ').trim(); return nombre ? { nombre, email: em, fono, s: match(nombre) } : null; }).filter(Boolean);
         setTimeout(()=> drawModal(m), 0);
       };
       $('#pcOk', el).onclick = ()=>{
         const t0 = now(); let n = 0;
-        st.res.filter(r=> r.s).forEach(r=>{ const s = S.socios.find(x=> x.id === r.s.id); s.email = r.email; s.u = t0; n++; });
-        closeModal(); changed(); refreshOpenModal(); toast(`✓ ${n} correo(s) guardados`, 'ok');
+        st.res.filter(r=> r.s).forEach(r=>{ const s = S.socios.find(x=> x.id === r.s.id); if(r.email) s.email = r.email; if(r.fono) s.telefono = r.fono; s.u = t0; n++; });
+        closeModal(); changed(); refreshOpenModal(); toast(`✓ Datos de ${n} socio(s) guardados`, 'ok');
       };
     },
   });
@@ -3080,7 +3081,7 @@ const _vSocios = VIEWS.socios, _mSocios = VIEWS.socios.mount;
 VIEWS.socios = function(){
   const h = _vSocios();
   const conMail = live('socios').filter(s=> !socioBaja(s) && emailValido(s.email)).length;
-  const bar = `<div class="toolbar"><button class="btn sm" data-act="correos">✉️ Enviar estados de cuenta por correo</button><button class="btn sm" data-act="pegar-correos">📋 Pegar correos</button><button class="btn sm" data-act="excel-socios">📊 Exportar a Excel</button><span class="dim small">${conMail} socio(s) activos con correo</span></div>`;
+  const bar = `<div class="toolbar"><button class="btn sm" data-act="correos">✉️ Enviar estados de cuenta por correo</button><button class="btn sm" data-act="pegar-correos">📋 Pegar correos o teléfonos</button><button class="btn sm" data-act="whatsapp">💬 WhatsApp</button><button class="btn sm" data-act="excel-socios">📊 Exportar a Excel</button><span class="dim small">${conMail} socio(s) activos con correo</span></div>`;
   const i = h.indexOf('<div class="toolbar">');
   return i > 0 ? h.slice(0, i) + bar + h.slice(i) : h;
 };
@@ -3186,7 +3187,7 @@ ACT['excel-socios'] = async ()=>{
       c.items.filter(it=> it.vencido || it.pagado).forEach(it=> mv.push({ k: it.mes + '-00', 'Socio': s.nombre, 'Correo': s.email || '', 'Fecha': mesLabelCap(it.mes), 'Tipo': it.condonado ? 'Condonación' : tipoTxt(it), 'Concepto': it.concepto, 'Cobrado': it.condonado ? 0 : it.monto, 'Pagado': it.pagado || 0, 'Estado': it.condonado ? 'Condonada' : it.tipo === 'exento' ? it.motivo || 'Exento' : it.estado === 'pagado' ? 'Pagado' : it.estado === 'parcial' ? 'Parcial' : 'Pendiente', 'Detalle': '' }));
       c.pagos.forEach(p=> mv.push({ k: p.fecha || '', 'Socio': s.nombre, 'Correo': s.email || '', 'Fecha': fdate(p.fecha), 'Tipo': 'Pago', 'Concepto': p.medio || '', 'Cobrado': '', 'Pagado': Number(p.monto) || 0, 'Estado': '', 'Detalle': [p.obs, p.por ? 'registró ' + p.por : ''].filter(Boolean).join(' · ') }));
       c.descuentos.forEach(d=> mv.push({ k: (d.mes || '') + '-00', 'Socio': s.nombre, 'Correo': s.email || '', 'Fecha': mesLabelCap(d.mes), 'Tipo': 'Descuento', 'Concepto': d.concepto || '', 'Cobrado': '', 'Pagado': Number(d.monto) || 0, 'Estado': '', 'Detalle': '' }));
-      correos.filter(x=> x.socioId === s.id).forEach(x=> mv.push({ k: (x.fecha || '').slice(0, 10), 'Socio': s.nombre, 'Correo': x.email || s.email || '', 'Fecha': fdate(x.fecha), 'Tipo': 'Correo enviado', 'Concepto': 'Estado de cuenta', 'Cobrado': '', 'Pagado': '', 'Estado': '', 'Detalle': 'Deuda informada: ' + clp(x.deuda) }));
+      correos.filter(x=> x.socioId === s.id).forEach(x=> mv.push({ k: (x.fecha || '').slice(0, 10), 'Socio': s.nombre, 'Correo': x.email || s.email || '', 'Fecha': fdate(x.fecha), 'Tipo': x.canal === 'whatsapp' ? 'WhatsApp enviado' : 'Correo enviado', 'Concepto': 'Estado de cuenta', 'Cobrado': '', 'Pagado': '', 'Estado': '', 'Detalle': 'Deuda informada: ' + clp(x.deuda) }));
     });
     const orden = new Map(socios.map((s, i)=> [s.nombre, i]));
     mv.sort((a, b)=> orden.get(a['Socio']) - orden.get(b['Socio']) || a.k.localeCompare(b.k));
@@ -3196,6 +3197,94 @@ ACT['excel-socios'] = async ()=>{
     XLSX.utils.book_append_sheet(wb, w3, 'Movimientos');
     XLSX.writeFile(wb, `socios-${normTxt(S.config.nombre || 'sindicato').replace(/[^a-z0-9]+/g, '-').slice(0, 30)}-${todayISO()}.xlsx`);
   }catch(e){ toast('⚠ ' + (e.message || e), 'bad'); }
+};
+
+
+/* =====================================================================
+   WHATSAPP: abre WhatsApp con el mensaje listo para cada socio.
+   (WhatsApp no permite envíos masivos automáticos sin su API de pago;
+    aquí se toca "Enviar" en WhatsApp por cada socio.)
+   ===================================================================== */
+const WA_DEF = `Hola {primer_nombre} 👋
+Te escribimos de {sindicato}.
+
+{resumen}
+
+{detalle}
+{plan}
+{enlace}
+Si ya pagaste o hay un error, avísanos por aquí. ¡Gracias!`;
+function waTpl(){ return S.config.waTexto || WA_DEF; }
+function normFono(t){
+  let d = String(t || '').replace(/\D/g, '');
+  if(d.startsWith('00')) d = d.slice(2);
+  if(d.length === 8) d = '569' + d;
+  else if(d.length === 9 && d[0] === '9') d = '56' + d;
+  return d.length >= 10 && d.length <= 15 ? d : '';
+}
+function waTexto(s){
+  const d = correoDatos(s);
+  const t = correoRender(waTpl(), s, d).replace(/Detalle de lo pendiente:/, '*Detalle de lo pendiente:*').replace(/  • /g, '• ');
+  return t.replace(/\n{3,}/g, '\n\n').trim();
+}
+function waUrl(s){ return 'https://wa.me/' + normFono(s.telefono) + '?text=' + encodeURIComponent(waTexto(s)); }
+function openWhatsApp(ids){
+  const st = { soloDeuda: ids ? false : correoCfg().soloDeuda, ver: null };
+  const lista = ()=> sociosOrdenados().filter(s=> !socioBaja(s) || cuentaSocio(s).deuda > 0).filter(s=> !ids || ids.includes(s.id)).filter(s=> !st.soloDeuda || cuentaSocio(s).deuda > 0);
+  const m = openModal({
+    wide: true,
+    title: ()=> '💬 Enviar estado de cuenta por WhatsApp',
+    body: ()=>{
+      const ya = enviadosEsteMes('whatsapp');
+      const ls = lista(), con = ls.filter(s=> normFono(s.telefono)), sin = ls.filter(s=> !normFono(s.telefono));
+      const pend = con.filter(s=> !ya.has(s.id));
+      const v = (st.ver && getById('socios', st.ver)) || pend[0] || con[0];
+      return `<p class="dim small">Toca <b>💬 Abrir</b> y se abre WhatsApp con el mensaje escrito; solo tocas enviar. Al volver, sigue con el próximo. ${pend.length ? `Quedan <b>${pend.length}</b> por enviar este mes.` : con.length ? '✓ Ya se enviaron todos este mes.' : ''}</p>
+        ${ids ? '' : `<div class="seg" id="waFil" style="margin-bottom:10px"><button type="button" data-v="1" class="${st.soloDeuda ? 'active' : ''}">Solo socios con deuda</button><button type="button" data-v="0" class="${!st.soloDeuda ? 'active' : ''}">Todos</button></div>`}
+        ${pend.length ? `<button class="btn primary" style="width:100%;margin-bottom:10px" data-act="wa-abrir" data-id="${pend[0].id}">💬 Abrir siguiente: ${esc(pend[0].nombre)}</button>` : ''}
+        <div class="table-wrap" style="max-height:34vh;overflow:auto"><table class="t"><tbody>
+        ${con.map(s=>{ const d = cuentaSocio(s).deuda; const ok = ya.has(s.id); return `<tr class="${ok ? 'done' : ''}"><td><a href="#" class="ceVer waVer" data-id="${s.id}">${nombreHtml(s, { chip: false })}</a><div class="tiny dim">${esc(s.telefono)}${ok ? ' · ✓ enviado este mes' : ''}</div></td><td class="r ${d ? 'val bad' : 'dim'}">${d ? clp(d) : 'Al día'}</td><td class="r"><button class="btn sm" data-act="wa-abrir" data-id="${s.id}">💬 ${ok ? 'Reenviar' : 'Abrir'}</button></td></tr>`; }).join('') || '<tr><td class="empty">Nadie con teléfono en esta lista.</td></tr>'}
+        </tbody></table></div>
+        ${sin.length ? `<div class="note warn small">${sin.length} socio(s) sin teléfono. <a href="#" data-act="pegar-correos">Agregar teléfonos</a></div>` : ''}
+        ${v ? `<h3>Mensaje para ${esc(v.nombre)}</h3><div class="note" style="white-space:pre-wrap;color:var(--text)">${esc(waTexto(v))}</div>` : ''}
+        <p class="dim tiny">El texto se edita en ⚙️ Ajustes → Correos a los socios → Texto de WhatsApp.</p>`;
+    },
+    foot: ()=> `<button class="btn" data-act="close-modal">Cerrar</button>`,
+    onMount: el=>{
+      const f = $('#waFil', el); if(f) f.onclick = e=>{ const b = e.target.closest('button[data-v]'); if(b){ st.soloDeuda = b.dataset.v === '1'; drawModal(m); } };
+      $$('.waVer', el).forEach(a=> a.onclick = e=>{ e.preventDefault(); st.ver = a.dataset.id; drawModal(m); });
+      el._redraw = ()=> drawModal(m);
+    },
+  });
+  m.el._waModal = true;
+}
+ACT['whatsapp'] = ()=> openWhatsApp(null);
+ACT['wa-socio'] = el=>{
+  const s = getById('socios', el.dataset.id);
+  if(!normFono(s.telefono)){ toast('Este socio no tiene teléfono válido. Agrégalo en "Editar datos".', 'bad'); return; }
+  openWhatsApp([s.id]);
+};
+ACT['wa-abrir'] = el=>{
+  const s = getById('socios', el.dataset.id); if(!s) return;
+  window.open(waUrl(s), '_blank', 'noopener');
+  S.correos.push({ id: uid(), socioId: s.id, canal: 'whatsapp', email: s.telefono, fecha: new Date().toISOString(), deuda: cuentaSocio(s).deuda, ok: true, por: yo(), u: now() });
+  changed({ noRender: true });
+  setTimeout(()=> modalStack.forEach(x=> x.el._waModal && drawModal(x)), 300);
+};
+/* Texto de WhatsApp en Ajustes */
+const _vAj2 = VIEWS.ajustes, _mAj2 = VIEWS.ajustes.mount;
+VIEWS.ajustes = function(){
+  const h = _vAj2();
+  const mark = '<div id="ccPrevBox"></div>';
+  const extra = `<h3>Texto de WhatsApp</h3><label class="f">Mensaje<textarea id="waTx" style="min-height:200px">${esc(waTpl())}</textarea></label>
+    <div class="btn-row"><button class="btn sm primary" id="waGuardar">Guardar texto</button><button class="btn sm" id="waReset">Restaurar texto original</button><button class="btn sm" data-act="whatsapp">💬 Enviar por WhatsApp</button></div>`;
+  return h.replace(mark, mark + extra);
+};
+VIEWS.ajustes.mount = function(v){
+  if(_mAj2) _mAj2(v);
+  const t = $('#waTx', v); if(!t) return;
+  $('#waGuardar', v).onclick = ()=>{ setConfig({ waTexto: t.value.trim() ? t.value : '' }, { noRender: true }); toast('✓ Texto de WhatsApp guardado', 'ok'); };
+  $('#waReset', v).onclick = ()=>{ t.value = WA_DEF; setConfig({ waTexto: '' }, { noRender: true }); };
 };
 
 /* =====================================================================
