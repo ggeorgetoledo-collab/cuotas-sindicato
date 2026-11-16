@@ -87,6 +87,9 @@
   .acta .txt{ white-space:pre-wrap; font-size:0.93rem; }
   .acta ol{ margin:0; padding-left:20px; } .acta li{ margin:4px 0; }
   .files{ display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .dchip{ flex:none; width:46px; height:50px; border-radius:11px; background:var(--primary-light); color:var(--primary-dark); display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1.05; }
+  .dchip b{ font-family:Manrope,sans-serif; font-size:1.2rem; } .dchip span{ font-size:0.72rem; font-weight:700; text-transform:uppercase; } .dchip.sin{ background:var(--bg); font-size:1.3rem; }
+  .ptabs button{ flex:1 0 auto; }
   .tk{ font-size:1.2rem; line-height:1; width:24px; text-align:center; }
   @media (prefers-color-scheme: dark){ .ptabs button.on{ color:#10141a; } }
   @media (prefers-color-scheme: dark){ .btn{ color:#10141a; } .brand i{ color:#10141a; } }
@@ -214,7 +217,9 @@
     const pm = MESES[proxIdx % 12]; const prox = pm.charAt(0).toUpperCase() + pm.slice(1) + ' · vence el ' + (p.dv || 10);
     const desc = p.desc || [];
     const cm = session.comun, mt = p.mt || [];
-    const tabs = [['cuotas', '💵 Mis cuotas']];
+    const avs = avisosVig(cm);
+    const tabs = [['cuotas', '💵 Cuotas']];
+    if(avs.length) tabs.push(['avisos', '📢 Avisos']);
     if(cm && cm.actas.length) tabs.push(['actas', '📄 Actas']);
     if((cm && cm.tareas.length) || mt.length) tabs.push(['tareas', '✅ Acuerdos']);
     if(!tabs.some(t=> t[0] === session.tab)) session.tab = 'cuotas';
@@ -227,8 +232,11 @@
       const lk = document.getElementById('lock'); if(lk) lk.onclick = ()=>{ lsSet('cp_pin::' + session.token, null); session.payload = null; askPin(''); };
     };
     if(session.tab === 'actas'){ app.innerHTML = head + actasHtml(cm) + salir; wire(); app.querySelectorAll('[data-file]').forEach(b=> b.onclick = ()=> abrirArchivo(b)); return; }
+    if(session.tab === 'avisos'){ app.innerHTML = head + avisosHtml(avs, cm, mt) + salir; wire(); app.querySelectorAll('[data-ics]').forEach(b=> b.onclick = ()=> ics(avs.find(a=> a.id === b.dataset.ics))); return; }
     if(session.tab === 'tareas'){ app.innerHTML = head + tareasHtml(cm, mt) + salir; wire(); return; }
+    const proxAv = avs.filter(a=> a.f)[0];
     app.innerHTML = `${head}
+    ${proxAv ? `<div class="card" style="cursor:pointer" id="proxAv"><div class="row" style="padding:0;border:none">${dchip(proxAv.f)}<div class="main" style="flex:1"><div class="sub">Próximo aviso · ${cuando(proxAv.f)}</div><div class="title">${(TAV[proxAv.ti] || TAV.comunicado)[0]} ${esc(proxAv.t)}</div></div><span class="dim">›</span></div></div>` : ''}
     ${mt.filter(t=> t.e !== 'cumplida').length ? `<div class="card"><h2>📌 Tienes ${mt.filter(t=> t.e !== 'cumplida').length} tarea(s) a tu cargo</h2>${mt.filter(t=> t.e !== 'cumplida').slice(0, 3).map(tareaRow).join('')}</div>` : ''}
     ${c.deuda > 0
       ? `<div class="status bad"><div class="ico">⚠️</div><div><h2>Tienes ${clp(c.deuda)} pendiente</h2><div class="small">${c.meses.length ? (c.meses.length === 1 ? 'Adeudas 1 mes: ' : `Adeudas ${c.meses.length} meses: `) + esc(c.meses.map(m=> mesLabel(m, true)).join(', ')) : 'Tienes cobros pendientes.'}</div></div></div>`
@@ -252,6 +260,7 @@
     <div class="note">Información actualizada el ${esc(fdatetime(p.generado || session.data.generado))}. Los pagos recientes pueden tardar en aparecer.<br>Los pagos se imputan primero a la deuda más antigua. Ante cualquier duda, consulta con la directiva.</div>
     ${salir}`;
     wire();
+    const pa = document.getElementById('proxAv'); if(pa) pa.onclick = ()=>{ session.tab = 'avisos'; render(); window.scrollTo(0, 0); };
     const yp = document.getElementById('yPrev'), yn = document.getElementById('yNext');
     yp.onclick = ()=>{ session.year--; render(); };
     yn.onclick = ()=>{ session.year++; render(); };
@@ -279,6 +288,40 @@
       ${a.ac.length ? `<h3>Acuerdos</h3><ol>${a.ac.map(x=> `<li>${esc(x)}</li>`).join('')}</ol>` : ''}
       ${a.c || a.as ? `<details ${i === 0 && !a.ar.length ? 'open' : ''}><summary>Ver acta completa</summary>${a.as ? `<div class="small" style="margin-top:6px"><b>Asistentes:</b> ${esc(a.as)}</div>` : ''}${a.c ? `<div class="txt" style="margin-top:8px">${esc(a.c)}</div>` : ''}</details>` : ''}
     </div>`).join('');
+  }
+  const TAV = { asamblea: ['🗳️', 'Asamblea'], reunion: ['👥', 'Reunión de directiva'], actividad: ['🎉', 'Actividad'], plazo: ['⏰', 'Plazo / recordatorio'], comunicado: ['📢', 'Comunicado'] };
+  const DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+  function avisosVig(cm){
+    if(!cm || !cm.avisos) return [];
+    const h = hoyISO();
+    const conF = cm.avisos.filter(a=> a.f && a.f >= h).sort((a, b)=> (a.f + a.h).localeCompare(b.f + b.h));
+    const sinF = cm.avisos.filter(a=> !a.f).sort((a, b)=> (b.cr || '').localeCompare(a.cr || ''));
+    return conF.concat(sinF);
+  }
+  function pDate(iso){ const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null; }
+  function fLarga(iso){ const d = pDate(iso); if(!d) return ''; const t = DIAS[d.getDay()] + ' ' + d.getDate() + ' de ' + MESES[d.getMonth()]; return t.charAt(0).toUpperCase() + t.slice(1); }
+  function cuando(iso){ const d = pDate(iso); const h = new Date(); h.setHours(0, 0, 0, 0); const n = Math.round((d - h) / 86400000); return n === 0 ? 'hoy' : n === 1 ? 'mañana' : n > 0 ? 'en ' + n + ' días' : 'hace ' + (-n) + ' días'; }
+  function dchip(iso){ const d = pDate(iso); return d ? `<div class="dchip"><b>${d.getDate()}</b><span>${MESES_C[d.getMonth()]}</span></div>` : '<div class="dchip sin">📢</div>'; }
+  function avisosHtml(avs, cm, mt){
+    const conF = avs.filter(a=> a.f), sinF = avs.filter(a=> !a.f);
+    const h = hoyISO();
+    const plazos = ((cm && cm.tareas) || []).concat(mt.filter(t=> !((cm && cm.tareas) || []).some(x=> x.id === t.id))).filter(t=> t.e !== 'cumplida' && t.p && t.p >= h).sort((a, b)=> a.p.localeCompare(b.p));
+    const card = a=> { const tp = TAV[a.ti] || TAV.comunicado; return `<div class="card"><div class="row" style="padding:0 0 8px">${dchip(a.f)}<div class="main" style="flex:1"><div class="title">${tp[0]} ${esc(a.t)}</div><div class="sub">${a.f ? esc(fLarga(a.f)) + (a.h ? ', ' + esc(a.h) + ' h' : '') + ' · ' + cuando(a.f) : 'Comunicado · ' + fdate(a.cr)}</div></div></div>
+      ${a.l ? `<div class="small">📍 ${esc(a.l)}</div>` : ''}${a.x ? `<div class="txt small" style="white-space:pre-wrap;margin-top:6px">${esc(a.x)}</div>` : ''}
+      ${a.f ? `<div style="margin-top:10px"><button class="btn sec" data-ics="${esc(a.id)}">📅 Agregar a mi calendario</button></div>` : ''}</div>`; };
+    return `${conF.length ? `<h2 style="margin:4px 2px 10px">Próximas fechas</h2>${conF.map(card).join('')}` : ''}
+      ${plazos.length ? `<div class="card"><h2>⏰ Plazos de acuerdos</h2>${plazos.map(t=> `<div class="row">${dchip(t.p)}<div class="main" style="flex:1"><div class="title">${esc(t.x)}</div><div class="sub">${t.r ? '👤 ' + esc(t.r) + ' · ' : ''}${cuando(t.p)}</div></div></div>`).join('')}</div>` : ''}
+      ${sinF.length ? `<h2 style="margin:14px 2px 10px">Comunicados</h2>${sinF.map(card).join('')}` : ''}`;
+  }
+  function ics(a){
+    if(!a) return;
+    const f = a.f.replace(/-/g, ''), st = s=> String(s || '').replace(/[\\,;]/g, m=> '\\' + m).replace(/\n/g, '\\n');
+    let ds, de;
+    if(a.h){ const [hh, mm] = a.h.split(':').map(Number); const e = new Date(2000, 0, 1, hh + 2, mm); ds = 'DTSTART:' + f + 'T' + pad2(hh) + pad2(mm) + '00'; de = 'DTEND:' + f + 'T' + pad2(e.getHours()) + pad2(e.getMinutes()) + '00'; }
+    else { const d = pDate(a.f); d.setDate(d.getDate() + 1); ds = 'DTSTART;VALUE=DATE:' + f; de = 'DTEND;VALUE=DATE:' + d.getFullYear() + pad2(d.getMonth() + 1) + pad2(d.getDate()); }
+    const txt = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Gestion Sindical//ES', 'BEGIN:VEVENT', 'UID:' + a.id + '@gestion-sindical', 'DTSTAMP:' + new Date().toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z', ds, de, 'SUMMARY:' + st(a.t), a.l ? 'LOCATION:' + st(a.l) : '', a.x ? 'DESCRIPTION:' + st(a.x) : '', 'END:VEVENT', 'END:VCALENDAR'].filter(Boolean).join('\r\n');
+    const url = URL.createObjectURL(new Blob([txt], { type: 'text/calendar' }));
+    const l = document.createElement('a'); l.href = url; l.download = 'evento.ics'; document.body.appendChild(l); l.click(); l.remove(); setTimeout(()=> URL.revokeObjectURL(url), 30000);
   }
   async function gkey(){ return crypto.subtle.importKey('raw', b64ToBytes(session.payload.gk), 'AES-GCM', false, ['decrypt']); }
   async function cargarComun(){

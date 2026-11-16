@@ -257,6 +257,12 @@ body.en-menu #tabs{ display:none; }
 .hub-s{ color:var(--dim); font-size:0.95rem; }
 .hub-k{ margin-top:8px; font-size:0.85rem; font-weight:700; color:var(--text); background:var(--bg); border-radius:999px; padding:5px 12px; }
 @media (max-width:640px){ .hub-mod{ min-height:200px; } .hub-ico{ font-size:3.4rem; } }
+.hub{ grid-template-columns:repeat(3, minmax(0,1fr)); }
+@media (max-width:860px){ .hub{ grid-template-columns:1fr; } .hub-mod{ min-height:170px; padding:20px 16px; } .hub-ico{ font-size:3rem; } }
+.dchip{ flex:none; width:46px; height:50px; border-radius:11px; background:var(--primary-light); color:var(--primary-dark); display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1.05; margin-right:4px; }
+.dchip b{ font-family:Manrope,sans-serif; font-size:1.2rem; }
+.dchip span{ font-size:0.72rem; font-weight:700; text-transform:uppercase; }
+.dchip.sin{ background:var(--bg); font-size:1.3rem; }
 
 </style>
 </head>
@@ -277,6 +283,7 @@ body.en-menu #tabs{ display:none; }
     <button type="button" data-tab="ingresos" data-mod="fin">📈 Ingresos</button>
     <button type="button" data-tab="actas" data-mod="actas">📄 Actas</button>
     <button type="button" data-tab="tareas" data-mod="actas">✅ Tareas</button>
+    <button type="button" data-tab="avisos" data-mod="avisos">📢 Avisos</button>
     <button type="button" data-tab="portal">🪪 Portal</button>
     <button type="button" data-tab="ajustes">⚙️ Ajustes</button>
   </nav>
@@ -290,7 +297,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 </script>
 <script>
-const APP_VERSION = "20261116135319";
+const APP_VERSION = "20261116142604";
 'use strict';
 /* =====================================================================
    CUOTAS SINDICALES — administración de cuotas y deuda de socios
@@ -345,7 +352,7 @@ function rutValido(r){
 /* ---------- Estado ----------
    Cada registro lleva id, u (última modificación, ms) y del (borrado lógico).
    Así los cambios de varios dirigentes se combinan registro por registro sin pisarse. */
-const COLS = ['tarifas', 'socios', 'pagos', 'cobros', 'ajustes', 'planes', 'autoriz', 'acuerdos', 'nominas', 'gastos', 'ingresos', 'correos', 'actas', 'tareas'];
+const COLS = ['tarifas', 'socios', 'pagos', 'cobros', 'ajustes', 'planes', 'autoriz', 'acuerdos', 'nominas', 'gastos', 'ingresos', 'correos', 'actas', 'tareas', 'avisos'];
 const MEDIOS = ['Efectivo', 'Transferencia', 'Descuento por planilla', 'Depósito', 'Otro'];
 function emptyState(){
   const e = { v: 1, config: { nombre: '', diaVencimiento: 10, mesInicioDefault: curYm(), portalAuto: true, u: 0 } };
@@ -1241,9 +1248,10 @@ function openImportar(){
 /* =====================================================================
    MENÚ PRINCIPAL: dos grandes módulos (Finanzas / Actas y acuerdos)
    ===================================================================== */
-const MOD_INICIO = { fin: 'inicio', actas: 'actas' };
+const MOD_INICIO = { fin: 'inicio', actas: 'actas', avisos: 'avisos' };
 let currentMod = lsGet('cs_mod', 'fin');
 function modDeTab(t){ const b = document.querySelector('#tabs button[data-tab="' + t + '"]'); return b ? b.dataset.mod || '' : ''; }
+function avSub(){ try{ const n = live('avisos').filter(a=> a.fecha && a.fecha >= todayISO()).sort((a, b)=> a.fecha.localeCompare(b.fecha))[0]; return n ? 'Próximo: ' + n.titulo + ' · ' + cuandoTxt(n.fecha) : 'Sin fechas próximas'; }catch(e){ return ''; } }
 function appSinConfigurar(){ return !S.config.nombre || live('tarifas').length === 0 || live('socios').length === 0; }
 
 VIEWS.menu = function(){
@@ -1261,6 +1269,10 @@ VIEWS.menu = function(){
     <button type="button" class="hub-mod" data-act="abrir-mod" data-mod="actas">
       <span class="hub-ico">📄</span><span class="hub-t">Actas y acuerdos</span>
       <span class="hub-s">Actas de asamblea, acuerdos y tareas</span><span class="hub-k">${esc(actSub)}${vencidas ? ` · <b style="color:var(--bad)">${vencidas} vencida(s)</b>` : ''}</span>
+    </button>
+    <button type="button" class="hub-mod" data-act="abrir-mod" data-mod="avisos">
+      <span class="hub-ico">📢</span><span class="hub-t">Avisos y comunicados</span>
+      <span class="hub-s">Fechas de asambleas, actividades y plazos</span><span class="hub-k">${esc(avSub())}</span>
     </button>
   </div>`;
 };
@@ -3971,6 +3983,7 @@ async function publicarComun(){
   const data = {
     actas: live('actas').filter(a=> a.publico).sort((a, b)=> (b.fecha || '').localeCompare(a.fecha || '')).map(a=> ({ id: a.id, f: a.fecha, t: a.titulo || a.tipo, ti: a.tipo, q: a.quorum || '', as: a.asistentes || '', c: a.contenido || '', ac: (a.acuerdos || []).map(x=> x.texto), ar: (a.archivos || []).map(f=> ({ id: f.id, n: f.nombre, ty: f.tipo, s: f.size })) })),
     tareas: live('tareas').filter(t=> t.publico).map(tareaPortal),
+    avisos: typeof avisosPortal === 'function' ? avisosPortal() : [],
   };
   const hash = hex(await shaBytes(JSON.stringify(data) + gkB64())).slice(0, 20);
   if(hash === lsGet('cs_comun_hash::' + conn().fileId, '')) return;
@@ -3987,6 +4000,130 @@ publishPortal = async function(force, onProgress, silent){
   try{ await publicarComun(); }catch(e){ if(!silent) toast('⚠ Actas: ' + (e.message || e), 'bad'); }
   return r;
 };
+
+/* =====================================================================
+   AVISOS Y COMUNICADOS
+   - Avisos con fecha (asambleas, reuniones, actividades, plazos) y
+     comunicados sin fecha.
+   - Agenda: próximas fechas de avisos + plazos de tareas abiertas.
+   - Lo público se publica en el portal de socios (archivo común).
+   ===================================================================== */
+const TIPOS_AVISO = {
+  asamblea: ['🗳️', 'Asamblea'], reunion: ['👥', 'Reunión de directiva'], actividad: ['🎉', 'Actividad'],
+  plazo: ['⏰', 'Plazo / recordatorio'], comunicado: ['📢', 'Comunicado'],
+};
+const DIAS_S = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+const MESES_A = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+['aviso-ver', 'av-wa'].forEach(a=> ACT_LIBRES.add(a));
+
+function fechaLarga(iso){ const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/); if(!m) return ''; const d = new Date(+m[1], +m[2] - 1, +m[3]); return `${DIAS_S[d.getDay()]} ${+m[3]} de ${MESES[+m[2] - 1]}`; }
+function diasHasta(iso){ const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/); if(!m) return null; const h = new Date(); h.setHours(0, 0, 0, 0); return Math.round((new Date(+m[1], +m[2] - 1, +m[3]) - h) / 86400000); }
+function cuandoTxt(iso){ const n = diasHasta(iso); if(n == null) return ''; if(n === 0) return 'hoy'; if(n === 1) return 'mañana'; if(n === -1) return 'ayer'; return n > 0 ? 'en ' + n + ' días' : 'hace ' + (-n) + ' días'; }
+function fechaChip(iso){ const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `<div class="dchip"><b>${+m[3]}</b><span>${MESES_A[+m[2] - 1]}</span></div>` : '<div class="dchip sin">📢</div>'; }
+
+/* Agenda combinada: avisos con fecha + plazos de tareas abiertas */
+function agendaItems(soloPublico){
+  const hoy = todayISO();
+  const av = live('avisos').filter(a=> a.fecha && a.fecha >= hoy && (!soloPublico || a.publico)).map(a=> ({ k: 'a', f: a.fecha, h: a.hora || '', a }));
+  const ts = live('tareas').filter(t=> t.estado !== 'cumplida' && t.plazo && (!soloPublico || t.publico)).map(t=> ({ k: 't', f: t.plazo, h: '', t }));
+  return av.concat(ts).sort((x, y)=> (x.f + x.h).localeCompare(y.f + y.h));
+}
+function agendaRow(it){
+  if(it.k === 'a'){
+    const a = it.a, tp = TIPOS_AVISO[a.tipo] || TIPOS_AVISO.comunicado;
+    return `<div class="row click" data-act="aviso-ver" data-id="${a.id}">${fechaChip(a.fecha)}<div class="main"><div class="title">${tp[0]} ${esc(a.titulo)}</div>
+      <div class="sub">${esc(fechaLarga(a.fecha))}${a.hora ? ', ' + esc(a.hora) + ' h' : ''}${a.lugar ? ' · 📍 ' + esc(a.lugar) : ''} · ${cuandoTxt(a.fecha)}</div></div>
+      ${a.publico ? '<span class="chip ok">Socios</span>' : '<span class="chip neutral">Directiva</span>'}</div>`;
+  }
+  const t = it.t, venc = t.plazo < todayISO();
+  return `<div class="row click" data-act="tarea-ver" data-id="${t.id}">${fechaChip(t.plazo)}<div class="main"><div class="title">✅ ${esc(t.texto)}</div>
+    <div class="sub">Plazo de tarea${respTxt(t) ? ' · 👤 ' + esc(respTxt(t)) : ''} · ${venc ? '<b style="color:var(--bad)">venció ' + cuandoTxt(t.plazo) + '</b>' : cuandoTxt(t.plazo)}</div></div>
+    <span class="chip ${ESTADOS_T[t.estado || 'pendiente'][2]}">${ESTADOS_T[t.estado || 'pendiente'][0]}</span></div>`;
+}
+
+VIEWS.avisos = function(){
+  const hoy = todayISO();
+  const ag = agendaItems(false);
+  const venc = ag.filter(i=> i.f < hoy), prox = ag.filter(i=> i.f >= hoy);
+  const com = live('avisos').filter(a=> !a.fecha).sort((a, b)=> (b.creado || '').localeCompare(a.creado || ''));
+  const pas = live('avisos').filter(a=> a.fecha && a.fecha < hoy).sort((a, b)=> b.fecha.localeCompare(a.fecha));
+  return `<div class="card"><div class="card-head"><h2>📅 Próximas fechas</h2><button class="btn primary sm" data-act="aviso-nuevo">+ Nuevo aviso</button></div>
+      <p class="dim tiny">Asambleas, reuniones y actividades, junto con los plazos de las tareas abiertas.</p>
+      ${prox.length ? prox.map(agendaRow).join('') : '<div class="empty">No hay fechas próximas. Crea un aviso de asamblea o actividad.</div>'}
+    </div>
+    ${venc.length ? `<div class="card"><h2>⚠️ Tareas con plazo vencido</h2>${venc.map(agendaRow).join('')}</div>` : ''}
+    <div class="card"><div class="card-head"><h2>📢 Comunicados</h2><button class="btn sm" data-act="aviso-nuevo" data-tipo="comunicado">+ Comunicado</button></div>
+      ${com.length ? com.map(a=> `<div class="row click" data-act="aviso-ver" data-id="${a.id}">${fechaChip('')}<div class="main"><div class="title">${esc(a.titulo)}</div><div class="sub">${a.texto ? esc(a.texto.slice(0, 110)) + (a.texto.length > 110 ? '…' : '') + ' · ' : ''}publicado ${fdate(a.creado)}</div></div>${a.publico ? '<span class="chip ok">Socios</span>' : '<span class="chip neutral">Directiva</span>'}</div>`).join('') : '<div class="dim small">Sin comunicados.</div>'}
+    </div>
+    ${pas.length ? `<div class="card"><details><summary class="dim">Avisos pasados (${pas.length})</summary>${pas.map(a=> agendaRow({ k: 'a', f: a.fecha, a }).replace(/ · (hace|ayer)[^<]*/, '')).join('')}</details></div>` : ''}`;
+};
+
+function avisoWaTexto(a){
+  const tp = TIPOS_AVISO[a.tipo] || TIPOS_AVISO.comunicado;
+  const l = [`${tp[0]} *${a.titulo}*`];
+  if(a.fecha) l.push(`📅 ${fechaLarga(a.fecha).replace(/^./, c=> c.toUpperCase())}${a.hora ? ', ' + a.hora + ' h' : ''}`);
+  if(a.lugar) l.push('📍 ' + a.lugar);
+  if(a.texto) l.push('', a.texto);
+  l.push('', '— ' + (S.config.nombre || 'Directiva del sindicato'));
+  return l.join('\n');
+}
+ACT['av-wa'] = el=>{ const a = getById('avisos', el.dataset.id); if(a) window.open('https://wa.me/?text=' + encodeURIComponent(avisoWaTexto(a)), '_blank'); };
+
+function openAvisoForm(id, tipo){
+  const a = id ? JSON.parse(JSON.stringify(getById('avisos', id))) : { id: uid(), tipo: tipo || 'asamblea', titulo: '', fecha: '', hora: '', lugar: '', texto: '', publico: true, creado: todayISO() };
+  const m = openModal({
+    wide: true, sticky: true,
+    title: ()=> id ? 'Editar aviso' : 'Nuevo aviso',
+    body: ()=> `<div class="grid2">
+        <label class="f">Tipo<select id="avT">${Object.entries(TIPOS_AVISO).map(([k, v])=> `<option value="${k}" ${k === a.tipo ? 'selected' : ''}>${v[0]} ${v[1]}</option>`).join('')}</select></label>
+        <label class="f">Título<input id="avTi" value="${esc(a.titulo)}" placeholder="${a.tipo === 'comunicado' ? 'Ej: Cambio de horario de atención' : 'Ej: Asamblea ordinaria de diciembre'}"></label>
+      </div>
+      <div class="grid3" style="margin-top:8px">
+        <label class="f">Fecha ${a.tipo === 'comunicado' ? '(opcional)' : ''}<input id="avF" type="date" value="${esc(a.fecha || '')}"></label>
+        <label class="f">Hora (opcional)<input id="avH" type="time" value="${esc(a.hora || '')}"></label>
+        <label class="f">Lugar (opcional)<input id="avL" value="${esc(a.lugar || '')}" placeholder="Ej: Sala de profesores"></label>
+      </div>
+      <label class="f" style="margin-top:8px">Mensaje / detalle${a.tipo === 'asamblea' ? ' (ej: tabla de la asamblea)' : ''}<textarea id="avX" style="min-height:130px">${esc(a.texto || '')}</textarea></label>
+      <label class="check" style="margin-top:10px"><input type="checkbox" id="avP" ${a.publico ? 'checked' : ''}> Visible para los socios en el portal</label>
+      <p class="dim tiny">Los avisos con fecha aparecen en "Próximas fechas" hasta que pasa el día; los comunicados sin fecha quedan en la lista de comunicados.</p>`,
+    foot: ()=> `${id ? '<button class="btn danger" id="avDel">Eliminar</button><span style="flex:1"></span>' : ''}<button class="btn" data-act="close-modal">Cancelar</button><button class="btn primary" id="avOk">Guardar</button>`,
+    onMount: el=>{
+      const leer = ()=>{ a.tipo = $('#avT', el).value; a.titulo = $('#avTi', el).value.trim(); a.fecha = $('#avF', el).value; a.hora = $('#avH', el).value; a.lugar = $('#avL', el).value.trim(); a.texto = $('#avX', el).value; a.publico = $('#avP', el).checked; };
+      $('#avT', el).onchange = ()=>{ leer(); drawModal(m); };
+      $('#avOk', el).onclick = ()=>{
+        leer();
+        if(!a.titulo){ a.titulo = (TIPOS_AVISO[a.tipo] || [, 'Aviso'])[1] + (a.fecha ? ' ' + fdate(a.fecha) : ''); }
+        if(a.tipo !== 'comunicado' && !a.fecha){ toast('Indica la fecha (o elige el tipo "Comunicado").', 'bad'); return; }
+        if(a.publico) ensureGk();
+        closeModal(); upsert('avisos', a); toast('✓ Aviso guardado', 'ok'); if(S.config.portalAuto) schedulePortal();
+      };
+      const d = $('#avDel', el); if(d) d.onclick = async ()=>{ if(!await confirmar('¿Eliminar este aviso?', 'Eliminar', true)) return; closeModal(); while(modalStack.length) closeModal(); removeRec('avisos', id); if(S.config.portalAuto) schedulePortal(); };
+    },
+  });
+}
+ACT['aviso-nuevo'] = el=> openAvisoForm(null, el.dataset.tipo);
+ACT['aviso-editar'] = el=>{ closeModal(); openAvisoForm(el.dataset.id); };
+ACT['aviso-ver'] = el=>{
+  const id = el.dataset.id;
+  openModal({
+    live: true,
+    title: ()=>{ const a = getById('avisos', id); return a ? (TIPOS_AVISO[a.tipo] || TIPOS_AVISO.comunicado)[0] + ' ' + esc(a.titulo) : 'Aviso eliminado'; },
+    body: ()=>{
+      const a = getById('avisos', id); if(!a) return '<div class="empty">Aviso eliminado.</div>';
+      return `<div class="btn-row" style="margin:-4px 0 10px"><span class="chip neutral">${(TIPOS_AVISO[a.tipo] || TIPOS_AVISO.comunicado)[1]}</span>${a.publico ? '<span class="chip ok">Visible para socios</span>' : '<span class="chip neutral">Solo directiva</span>'}</div>
+        ${a.fecha ? `<div class="title" style="font-weight:700">📅 ${esc(fechaLarga(a.fecha).replace(/^./, c=> c.toUpperCase()))}${a.hora ? ', ' + esc(a.hora) + ' h' : ''} <span class="dim small">(${cuandoTxt(a.fecha)})</span></div>` : ''}
+        ${a.lugar ? `<div style="margin-top:4px">📍 ${esc(a.lugar)}</div>` : ''}
+        ${a.texto ? `<div class="note" style="white-space:pre-wrap;color:var(--text);margin-top:10px">${esc(a.texto)}</div>` : ''}`;
+    },
+    foot: ()=> `<button class="btn" data-act="av-wa" data-id="${id}">🟢 Enviar por WhatsApp</button><span style="flex:1"></span><button class="btn" data-act="close-modal">Cerrar</button><button class="btn primary" data-act="aviso-editar" data-id="${id}">✏️ Editar</button>`,
+  });
+};
+
+/* Datos para el portal (se agregan al archivo común) */
+function avisosPortal(){
+  const hoy = todayISO();
+  return live('avisos').filter(a=> a.publico && (!a.fecha || a.fecha >= hoy)).map(a=> ({ id: a.id, ti: a.tipo, t: a.titulo, f: a.fecha || '', h: a.hora || '', l: a.lugar || '', x: a.texto || '', cr: a.creado || '' }));
+}
 
 /* =====================================================================
    GOOGLE DRIVE (sincronización con tu cuenta de Google)
