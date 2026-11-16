@@ -272,7 +272,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 </script>
 <script>
-const APP_VERSION = "20261116131424";
+const APP_VERSION = "20261116132754";
 'use strict';
 /* =====================================================================
    CUOTAS SINDICALES — administración de cuotas y deuda de socios
@@ -3450,6 +3450,196 @@ ACT['chat-wa'] = ()=>{
 const _vSoc3 = VIEWS.socios, _mSoc3 = VIEWS.socios.mount;
 VIEWS.socios = function(){ return _vSoc3().replace('<button class="btn sm" data-act="whatsapp">', '<button class="btn sm" data-act="chat-wa">👥 Desde grupo de WhatsApp</button><button class="btn sm" data-act="whatsapp">'); };
 VIEWS.socios.mount = _mSoc3;
+
+/* =====================================================================
+   BLOQUEO DE CAMBIOS: solo el tesorero (y luego quien se autorice) puede
+   modificar datos. Se desbloquea con PIN o con la huella del equipo.
+   La configuración del bloqueo viaja con los datos (Drive/repositorio),
+   así que aplica en todos los equipos. La huella se registra por equipo.
+   ===================================================================== */
+const LOCK_ITER = 120000;
+const ACT_LIBRES = new Set(['close-modal', 'ficha', 'go', 'go-ajustes-close', 'sync-now', 'excel', 'excel-socios', 'mv-excel', 'print-estado', 'print-estados', 'print-tarjetas', 'print-pins', 'plan-mes', 'plan-nomina', 'ver-plan', 'ac-hist-ver', 'ac-hist-word', 'tarjeta', 'ver-deudores', 'respaldo', 'gd-conectar', 'gd-desconectar', 'gd-client', 'conectar', 'unirse', 'desconectar', 'lk-desbloquear', 'lk-bloquear', 'borrar-local']);
+function lockCfg(cfg){ const c = (cfg || S.config).bloqueo; return c && c.on && Array.isArray(c.usuarios) && c.usuarios.length ? c : null; }
+function lockGuardado(){ try{ const p = JSON.parse(lsGet('cs_state', 'null') || 'null'); return lockCfg((p && p.config) || {}); }catch(e){ return null; } }
+let lkSesion = null;   // { idx, nombre, hasta }
+try{ const x = JSON.parse(sessionStorage.getItem('cs_lk') || 'null'); if(x && x.hasta > Date.now()) lkSesion = x; }catch(e){}
+function lkMinutos(){ const c = lockCfg(); return (c && Number(c.minutos)) || 15; }
+function desbloqueado(){ if(lkSesion && lkSesion.hasta > Date.now()) return true; lkSesion = null; return false; }
+function lkGuardarSesion(){ try{ sessionStorage.setItem('cs_lk', JSON.stringify(lkSesion)); }catch(e){} }
+function lkAbrir(idx){ const u = lockCfg().usuarios[idx]; lkSesion = { idx, nombre: u.nombre, cargo: u.cargo || '', hasta: Date.now() + lkMinutos() * 60000 }; lkGuardarSesion(); lkChip(); }
+function lkCerrar(){ lkSesion = null; try{ sessionStorage.removeItem('cs_lk'); }catch(e){} lkChip(); }
+function puedeCambiar(){ return !lockGuardado() || desbloqueado(); }
+/* la actividad extiende el desbloqueo */
+['click', 'keydown', 'touchstart'].forEach(ev=> document.addEventListener(ev, ()=>{ if(desbloqueado()){ lkSesion.hasta = Date.now() + lkMinutos() * 60000; lkGuardarSesion(); } }, true));
+setInterval(()=>{ if(lkSesion && !desbloqueado()) lkChip(); }, 20000);
+
+/* ---------- PIN ---------- */
+async function pinHash(pin, saltB64){
+  const base = await crypto.subtle.importKey('raw', TE.encode(String(pin)), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: b64ToBytes(saltB64), iterations: LOCK_ITER, hash: 'SHA-256' }, base, 256);
+  return bytesToB64(new Uint8Array(bits));
+}
+async function pinNuevo(pin){ const salt = bytesToB64(crypto.getRandomValues(new Uint8Array(16))); return { salt, hash: await pinHash(pin, salt) }; }
+
+/* ---------- Huella (WebAuthn, autenticador del propio equipo) ---------- */
+async function huellaDisponible(){ try{ return !!(window.PublicKeyCredential && PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable && await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()); }catch(e){ return false; } }
+function huellaKey(idx){ const c = lockCfg(); return 'cs_bio::' + ((c && c.usuarios[idx] && c.usuarios[idx].id) || idx); }
+function huellaId(idx){ return lsGet(huellaKey(idx), ''); }
+async function huellaRegistrar(idx){
+  const u = lockCfg().usuarios[idx];
+  const cred = await navigator.credentials.create({ publicKey: {
+    challenge: crypto.getRandomValues(new Uint8Array(32)),
+    rp: { name: 'Cuotas Sindicales' },
+    user: { id: crypto.getRandomValues(new Uint8Array(16)), name: u.nombre || 'tesorero', displayName: (u.nombre || 'Tesorero') + ' · ' + (S.config.nombre || 'Sindicato') },
+    pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+    authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'discouraged' },
+    timeout: 60000, attestation: 'none',
+  } });
+  lsSet(huellaKey(idx), bytesToB64(new Uint8Array(cred.rawId)));
+}
+async function huellaVerificar(idx){
+  const id = huellaId(idx); if(!id) throw new Error('No hay huella registrada en este equipo.');
+  const r = await navigator.credentials.get({ publicKey: { challenge: crypto.getRandomValues(new Uint8Array(32)), allowCredentials: [{ type: 'public-key', id: b64ToBytes(id) }], userVerification: 'required', timeout: 60000 } });
+  if(!r || !r.response || !(r.response.authenticatorData && (new Uint8Array(r.response.authenticatorData)[32] & 0x04))) throw new Error('La huella no fue verificada.');
+  return true;
+}
+
+/* ---------- Ventana para desbloquear ---------- */
+let lkPendiente = null;
+function lkFallos(){ try{ return JSON.parse(lsGet('cs_lk_f', '{"n":0,"t":0}')); }catch(e){ return { n: 0, t: 0 }; } }
+function abrirDesbloqueo(despues){
+  lkPendiente = despues || null;
+  if(modalStack.some(m=> m.el._lk)) return;
+  const c = lockGuardado() || lockCfg(); if(!c) return;
+  const st = { idx: 0, msg: '' };
+  const m = openModal({
+    title: ()=> '🔒 Desbloquear para hacer cambios',
+    body: ()=>{
+      const us = c.usuarios;
+      const f = lkFallos(), espera = f.n >= 5 ? Math.max(0, Math.ceil((f.t + 60000 * Math.min(10, f.n - 4) - Date.now()) / 1000)) : 0;
+      return `<p class="dim small">Solo ${us.length === 1 ? esc(us[0].nombre) + (us[0].cargo ? ' (' + esc(us[0].cargo) + ')' : '') : 'las personas autorizadas'} puede${us.length === 1 ? '' : 'n'} hacer cambios. Se vuelve a bloquear tras ${lkMinutos()} min sin uso.</p>
+        ${us.length > 1 ? `<label class="f">Quién eres<select id="lkU">${us.map((u, i)=> `<option value="${i}" ${i === st.idx ? 'selected' : ''}>${esc(u.nombre)}${u.cargo ? ' · ' + esc(u.cargo) : ''}</option>`).join('')}</select></label>` : ''}
+        ${huellaId(st.idx) ? `<button class="btn primary" id="lkBio" style="width:100%;min-height:52px;margin:10px 0">👆 Usar huella</button><div class="dim small" style="text-align:center">o escribe tu PIN</div>` : ''}
+        <input id="lkPin" class="pin-in" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off" aria-label="PIN" style="font-size:1.6rem;letter-spacing:0.4em;text-align:center;margin-top:10px" ${espera ? 'disabled' : ''}>
+        <div class="small" style="color:var(--bad);min-height:1.4em;margin-top:6px">${espera ? `Demasiados intentos. Espera ${espera} s.` : esc(st.msg)}</div>`;
+    },
+    foot: ()=> `<button class="btn" data-act="close-modal">Cancelar</button><button class="btn primary" id="lkOk">Desbloquear</button>`,
+    onMount: el=>{
+      el._lk = true;
+      el._onClose = ()=>{ if(!desbloqueado()) lkPendiente = null; };
+      const ok = ()=>{ const fn = lkPendiente; lkPendiente = null; el._onClose = null; closeModal(); toast(`🔓 Desbloqueado: ${lkSesion.nombre}`, 'ok'); if(fn) setTimeout(fn, 50); };
+      const u = $('#lkU', el); if(u) u.onchange = ()=>{ st.idx = Number(u.value); st.msg = ''; drawModal(m); };
+      const pin = $('#lkPin', el); if(pin && !pin.disabled && !huellaId(st.idx)) setTimeout(()=> pin.focus(), 50);
+      const probar = async ()=>{
+        const v = pin.value.trim(); if(!v) return;
+        const usr = c.usuarios[st.idx];
+        if(await pinHash(v, usr.salt) === usr.hash){ lsSet('cs_lk_f', null); lkAbrir(st.idx); ok(); }
+        else { const f = lkFallos(); f.n++; f.t = Date.now(); lsSet('cs_lk_f', JSON.stringify(f)); st.msg = 'PIN incorrecto.'; drawModal(m); }
+      };
+      $('#lkOk', el).onclick = probar;
+      if(pin) pin.onkeydown = e=>{ if(e.key === 'Enter') probar(); };
+      const bio = $('#lkBio', el);
+      if(bio) bio.onclick = async ()=>{ try{ await huellaVerificar(st.idx); lkAbrir(st.idx); ok(); }catch(e){ st.msg = e.name === 'NotAllowedError' ? 'Se canceló la huella. Usa tu PIN.' : e.message; drawModal(m); } };
+    },
+  });
+}
+ACT['lk-desbloquear'] = ()=> abrirDesbloqueo(()=> renderView());
+ACT['lk-bloquear'] = ()=>{ lkCerrar(); toast('🔒 Bloqueado'); };
+
+/* ---------- Guardias ---------- */
+// 1) Antes de una acción que modifica: pide desbloquear y luego la ejecuta
+document.addEventListener('click', e=>{
+  const el = e.target.closest('[data-act]'); if(!el) return;
+  if(ACT_LIBRES.has(el.dataset.act) || puedeCambiar()) return;
+  e.preventDefault(); e.stopImmediatePropagation();
+  abrirDesbloqueo(()=>{ if(document.contains(el)) el.click(); });
+}, true);
+// 2) Red de seguridad: si algo cambia sin desbloquear, se deshace
+const _changedLk = changed;
+changed = function(opts){
+  if(!puedeCambiar()){
+    try{ S = normalizeState(JSON.parse(lsGet('cs_state', 'null') || 'null')); }catch(e){}
+    invalidate();
+    const y = window.scrollY; renderView(); refreshOpenModal(); window.scrollTo(0, y);
+    toast('🔒 Los cambios están bloqueados. Desbloquea con tu PIN o huella y vuelve a intentarlo.', 'bad', 8000);
+    abrirDesbloqueo(null);
+    return;
+  }
+  _changedLk(opts);
+};
+// quien registra los cambios
+const _yoLk = yo;
+yo = function(){ return desbloqueado() ? lkSesion.nombre + (lkSesion.cargo ? ' (' + lkSesion.cargo + ')' : '') : _yoLk(); };
+// "Borrar todos los datos" no quita el bloqueo
+const _borrarTodoLk = ACT['borrar-todo'];
+ACT['borrar-todo'] = async el=>{ const b = S.config.bloqueo; await _borrarTodoLk(el); if(b){ S.config.bloqueo = b; saveLocal(); renderView(); } };
+
+/* ---------- Indicador en la barra superior ---------- */
+function lkChip(){
+  let el = $('#lkChip');
+  if(!lockCfg()){ if(el) el.remove(); return; }
+  if(!el){ el = document.createElement('button'); el.type = 'button'; el.id = 'lkChip'; el.className = 'sync-chip'; const sc = $('#syncChip'); sc.parentNode.insertBefore(el, sc); }
+  if(desbloqueado()){ el.dataset.act = 'lk-bloquear'; el.textContent = '🔓 ' + lkSesion.nombre.split(' ')[0]; el.title = 'Toca para bloquear'; el.className = 'sync-chip ok'; }
+  else { el.dataset.act = 'lk-desbloquear'; el.textContent = '🔒 Solo lectura'; el.title = 'Toca para desbloquear'; el.className = 'sync-chip'; }
+}
+const _renderLk = renderView;
+renderView = function(){ _renderLk(); lkChip(); };
+
+/* ---------- Ajustes ---------- */
+function lockCardHtml(){
+  const c = lockCfg();
+  if(!c) return `<div class="card"><h2>🔐 Bloqueo de cambios</h2>
+    <p class="dim small">Con el bloqueo activo, la app queda en <b>solo lectura</b> para cualquiera que la abra, y para hacer cambios hay que desbloquearla con tu <b>PIN</b> o tu <b>huella</b>. Aplica en todos los equipos conectados.</p>
+    <div class="grid2"><label class="f">Nombre<input id="lkN" value="${esc(lsGet('cs_yo', '') || 'Gonzalo George')}"></label><label class="f">Cargo<input id="lkC" value="Tesorero"></label>
+    <label class="f">PIN (4 a 8 números)<input id="lkP1" type="password" inputmode="numeric" maxlength="8" autocomplete="new-password"></label><label class="f">Repite el PIN<input id="lkP2" type="password" inputmode="numeric" maxlength="8" autocomplete="new-password"></label></div>
+    <div class="btn-row" style="margin-top:10px"><button class="btn primary" id="lkActivar">🔐 Activar bloqueo</button></div></div>`;
+  const u = c.usuarios[0];
+  return `<div class="card"><h2>🔐 Bloqueo de cambios</h2>
+    <div class="note ok small">Activo. Solo <b>${esc(u.nombre)}</b>${u.cargo ? ' (' + esc(u.cargo) + ')' : ''} puede hacer cambios. ${desbloqueado() ? '🔓 Desbloqueado ahora.' : '🔒 Bloqueado.'}</div>
+    <div class="grid2">
+      <label class="f">Bloquear de nuevo tras<select id="lkMin">${[5, 15, 30, 60].map(n=> `<option value="${n}" ${lkMinutos() === n ? 'selected' : ''}>${n} min sin uso</option>`).join('')}</select></label>
+      <div class="f"><span>Huella en este equipo</span><div id="lkBioBox" class="small dim" style="padding-top:8px">Revisando…</div></div>
+    </div>
+    <div class="btn-row" style="margin-top:10px"><button class="btn sm" id="lkPin">🔢 Cambiar PIN</button><button class="btn sm danger" id="lkOff">Desactivar bloqueo</button></div></div>`;
+}
+const _vAjLk = VIEWS.ajustes, _mAjLk = VIEWS.ajustes.mount;
+VIEWS.ajustes = function(){ const h = _vAjLk(); const i = h.indexOf('<div class="card">', 10); return i > 0 ? h.slice(0, i) + lockCardHtml() + h.slice(i) : h + lockCardHtml(); };
+VIEWS.ajustes.mount = function(v){
+  if(_mAjLk) _mAjLk(v);
+  const act = $('#lkActivar', v);
+  if(act) act.onclick = async ()=>{
+    const n = $('#lkN', v).value.trim(), cg = $('#lkC', v).value.trim(), p1 = $('#lkP1', v).value.trim(), p2 = $('#lkP2', v).value.trim();
+    if(!n){ toast('Escribe tu nombre.', 'bad'); return; }
+    if(!/^\d{4,8}$/.test(p1)){ toast('El PIN debe tener entre 4 y 8 números.', 'bad'); return; }
+    if(p1 !== p2){ toast('Los PIN no coinciden.', 'bad'); return; }
+    const ph = await pinNuevo(p1);
+    S.config.bloqueo = { on: true, minutos: 15, usuarios: [Object.assign({ id: randomId(8), nombre: n, cargo: cg }, ph)] };
+    lkSesion = null; S.config.u = now(); changed();
+    lkAbrir(0);
+    toast('🔐 Bloqueo activado. Puedes registrar tu huella en este equipo.', 'ok', 8000);
+    renderView();
+  };
+  const min = $('#lkMin', v); if(min) min.onchange = ()=>{ const b = Object.assign({}, S.config.bloqueo, { minutos: Number(min.value) }); setConfig({ bloqueo: b }, { noRender: true }); };
+  const off = $('#lkOff', v);
+  if(off) off.onclick = async ()=>{ if(!await confirmar('¿Desactivar el bloqueo? Cualquiera con acceso a la app podrá hacer cambios.', 'Desactivar', true)) return; setConfig({ bloqueo: { on: false, usuarios: [] } }); lkCerrar(); };
+  const cp = $('#lkPin', v);
+  if(cp) cp.onclick = ()=>{
+    openModal({ title: ()=> 'Cambiar PIN', body: ()=> `<div class="grid2"><label class="f">PIN nuevo<input id="cpA" type="password" inputmode="numeric" maxlength="8"></label><label class="f">Repítelo<input id="cpB" type="password" inputmode="numeric" maxlength="8"></label></div>`,
+      foot: ()=> `<button class="btn" data-act="close-modal">Cancelar</button><button class="btn primary" id="cpOk">Guardar</button>`,
+      onMount: el=>{ $('#cpOk', el).onclick = async ()=>{ const a = $('#cpA', el).value.trim(), b = $('#cpB', el).value.trim(); if(!/^\d{4,8}$/.test(a)){ toast('Entre 4 y 8 números.', 'bad'); return; } if(a !== b){ toast('No coinciden.', 'bad'); return; }
+        const ph = await pinNuevo(a); const bl = JSON.parse(JSON.stringify(S.config.bloqueo)); Object.assign(bl.usuarios[lkSesion ? lkSesion.idx : 0], ph); closeModal(); setConfig({ bloqueo: bl }); toast('✓ PIN cambiado', 'ok'); }; } });
+  };
+  const box = $('#lkBioBox', v);
+  if(box) huellaDisponible().then(ok=>{
+    const idx = lkSesion ? lkSesion.idx : 0;
+    if(!ok){ box.innerHTML = 'Este equipo no tiene lector de huella o el navegador no lo permite. Usa el PIN.'; return; }
+    box.innerHTML = huellaId(idx) ? `✓ Registrada <button class="btn ghost sm" id="lkBioDel">Quitar</button>` : `<button class="btn sm" id="lkBioAdd">👆 Registrar mi huella</button>`;
+    const add = $('#lkBioAdd', v);
+    if(add) add.onclick = async ()=>{ if(!desbloqueado()){ abrirDesbloqueo(()=> renderView()); return; } try{ await huellaRegistrar(idx); toast('✓ Huella registrada en este equipo', 'ok'); renderView(); }catch(e){ toast(e.name === 'NotAllowedError' ? 'Se canceló el registro de la huella.' : '⚠ ' + e.message, 'bad'); } };
+    const del = $('#lkBioDel', v); if(del) del.onclick = ()=>{ lsSet(huellaKey(idx), null); renderView(); };
+  });
+};
+lkChip();
 
 /* =====================================================================
    GOOGLE DRIVE (sincronización con tu cuenta de Google)
