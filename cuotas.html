@@ -807,13 +807,13 @@ async function publishPortal(force, onProgress, silent){
     ensureCredenciales();
     const socios = live('socios');
     const payloads = socios.map(s=> ({ s, p: buildPortalPayload(s) }));
-    const hash = hex(await shaBytes(JSON.stringify(payloads.map(x=> [x.s.token, x.s.pin, x.p])))).slice(0, 20);
+    const hash = hex(await shaBytes(JSON.stringify(payloads.map(x=> [x.s.token, S.config.portalPin ? x.s.pin : '', x.p])))).slice(0, 20);
     if(!force && hash === lsGet('cs_portal_hash::' + conn().fileId, '')) return { skipped: true, count: socios.length };
     const entries = {};
     let i = 0;
     for(const { s, p } of payloads){
       const id = hex(await shaBytes('cs-id:' + s.token)).slice(0, 32);
-      const key = await socioKey(s.token, s.pin);
+      const key = await socioKey(s.token, S.config.portalPin ? s.pin : '');
       p.generado = new Date().toISOString();
       entries[id] = await aesEncrypt(key, JSON.stringify(p));
       i++;
@@ -1224,7 +1224,7 @@ function fichaBody(id){
     <button class="btn" data-act="ajuste" data-id="${id}">➕ Exención / cargo / descuento</button>
     ${c.deuda > 0 ? `<button class="btn" data-act="condonar" data-id="${id}">🧽 Borrar deuda</button>` : ''}
     ${(()=>{ const pl = planActivoDe(id); return pl ? `<button class="btn" data-act="ver-plan" data-id="${pl.id}">🤝 Plan de pago (${planResumen(pl).pagadas}/${pl.cuotas})</button>` : (c.deuda > 0 ? `<button class="btn" data-act="nuevo-plan" data-id="${id}">🤝 Crear plan de pago</button>` : ''); })()}
-    <button class="btn" data-act="tarjeta" data-id="${id}">🪪 Tarjeta y PIN</button>
+    <button class="btn" data-act="tarjeta" data-id="${id}">🪪 ${S.config.portalPin ? 'Tarjeta y PIN' : 'Tarjeta QR'}</button>
     <button class="btn" data-act="correo-socio" data-id="${id}">✉️ Enviar por correo</button>
     <button class="btn" data-act="print-estado" data-id="${id}">🖨️ Estado de cuenta</button>
     <button class="btn" data-act="editar-socio" data-id="${id}">✏️ Editar datos</button>
@@ -1483,7 +1483,7 @@ ACT['tarjeta'] = el=>{
   ensureCredenciales();
   openModal({
     live: true,
-    title: ()=> 'Tarjeta y PIN',
+    title: ()=> S.config.portalPin ? 'Tarjeta y PIN' : 'Tarjeta QR',
     body: ()=>{
       const s = getById('socios', id);
       const url = socioPortalUrl(s);
@@ -1492,14 +1492,14 @@ ACT['tarjeta'] = el=>{
         <div class="qrbox">${ready ? qrSvg(url) : '<div class="empty" style="color:#555">Conecta el repositorio en Ajustes para generar el QR del portal.</div>'}</div>
         <div style="flex:1;min-width:200px">
           <div style="font-weight:800;font-size:1.1rem">${esc(s.nombre)}</div>
-          <div class="dim small" style="margin:4px 0 10px">El socio escanea el QR con la cámara de su celular y escribe su PIN para ver su estado de cuenta.</div>
-          <div class="dim small">PIN</div><div class="pin">${esc(s.pin)}</div>
+          <div class="dim small" style="margin:4px 0 10px">El socio escanea el QR con la cámara de su celular${S.config.portalPin ? ' y escribe su PIN' : ''} para ver su estado de cuenta.</div>
+          ${S.config.portalPin ? `<div class="dim small">PIN</div><div class="pin">${esc(s.pin)}</div>` : '<div class="dim small">Sin PIN: basta con el QR o el enlace.</div>'}
         </div></div>
       ${ready ? `<label class="f" style="margin-top:12px">Enlace personal (equivale al QR)<div class="copy-box">${esc(url)}</div></label>` : ''}
-      <div class="note small">Entrega el PIN por separado de la tarjeta (por ejemplo, en un papel aparte o en persona). Si alguien pierde la tarjeta, regenera la tarjeta; si alguien más conoce su PIN, cambia el PIN. En ambos casos publica el portal de nuevo.</div>
+      ${S.config.portalPin ? '<div class="note small">Entrega el PIN por separado de la tarjeta. Si alguien pierde la tarjeta, regenera la tarjeta; si alguien más conoce su PIN, cambia el PIN. En ambos casos publica el portal de nuevo.</div>' : '<div class="note small">Quien tenga este QR o enlace puede ver el estado de cuenta. Si se pierde la tarjeta o se comparte el enlace, toca "Regenerar tarjeta" y publica el portal de nuevo.</div>'}
       <div class="btn-row" style="margin-top:10px">
         ${ready ? `<button class="btn primary" id="tPrint">🖨️ Imprimir tarjeta</button><button class="btn" id="tCopy">📋 Copiar enlace</button>` : `<button class="btn primary" data-act="go-ajustes-close">Ir a Ajustes</button>`}
-        <button class="btn" id="tPin">🔢 Cambiar PIN</button>
+        ${S.config.portalPin ? '<button class="btn" id="tPin">🔢 Cambiar PIN</button>' : ''}
         <button class="btn danger" id="tTok">♻️ Regenerar tarjeta</button>
       </div>`;
     },
@@ -1507,7 +1507,7 @@ ACT['tarjeta'] = el=>{
       const s = getById('socios', id);
       const p = $('#tPrint', el); if(p) p.onclick = ()=> printTarjetas([s], true);
       const c = $('#tCopy', el); if(c) c.onclick = ()=>{ navigator.clipboard.writeText(socioPortalUrl(s)).then(()=> toast('Enlace copiado')); };
-      $('#tPin', el).onclick = async ()=>{ if(!await confirmar('¿Generar un PIN nuevo? El PIN anterior dejará de funcionar cuando publiques el portal.', 'Cambiar PIN')) return; const x = Object.assign({}, getById('socios', id), { pin: randomPin() }); upsert('socios', x); refreshOpenModal(); };
+      const tp = $('#tPin', el); if(tp) tp.onclick = async ()=>{ if(!await confirmar('¿Generar un PIN nuevo? El PIN anterior dejará de funcionar cuando publiques el portal.', 'Cambiar PIN')) return; const x = Object.assign({}, getById('socios', id), { pin: randomPin() }); upsert('socios', x); refreshOpenModal(); };
       $('#tTok', el).onclick = async ()=>{ if(!await confirmar('¿Regenerar la tarjeta? El QR impreso anterior dejará de funcionar y habrá que imprimir una nueva.', 'Regenerar', true)) return; const x = Object.assign({}, getById('socios', id), { token: randomToken(16), pin: randomPin() }); upsert('socios', x); refreshOpenModal(); };
     },
   });
@@ -2459,24 +2459,25 @@ VIEWS.portal = function(){
   return `
   <div class="card">
     <h2>Portal de socios</h2>
-    <p class="dim">Cada socio recibe una <b>tarjeta con código QR</b> y un <b>PIN de 4 dígitos</b>. Al escanear el QR con su celular se abre el portal; con el PIN ve su deuda, los meses pagados y sus pagos. Los datos se publican cifrados: sin la tarjeta <b>y</b> el PIN no se pueden leer.</p>
+    <p class="dim">Cada socio recibe una <b>tarjeta con código QR</b>${S.config.portalPin ? ' y un <b>PIN de 4 dígitos</b>' : ''}. Al escanear el QR con su celular ve su deuda, los meses pagados y sus pagos. Los datos se publican cifrados: sin la tarjeta${S.config.portalPin ? ' <b>y</b> el PIN' : ' (o su enlace)'} no se pueden leer.</p>
     ${ok ? `
       <dl class="kv" style="margin:12px 0">
         <dt>Dirección del portal</dt><dd><a href="${esc(portalBaseUrl())}" target="_blank" rel="noopener">${esc(portalBaseUrl())}</a></dd>
         <dt>Última publicación</dt><dd>${at ? fdatetime(at) : 'Nunca'}</dd>
         <dt>Socios</dt><dd>${n}</dd>
       </dl>
-      <label class="check" style="margin:8px 0 12px"><input type="checkbox" id="pAuto" ${S.config.portalAuto ? 'checked' : ''}> Publicar automáticamente después de cada cambio</label>
+      <label class="check" style="margin:8px 0 4px"><input type="checkbox" id="pAuto" ${S.config.portalAuto ? 'checked' : ''}> Publicar automáticamente después de cada cambio</label>
+      <label class="check" style="margin:4px 0 12px"><input type="checkbox" id="pPin" ${S.config.portalPin ? 'checked' : ''}> Pedir PIN además del QR</label>
       <div class="btn-row"><button class="btn primary" data-act="publicar">🚀 Publicar ahora</button></div>
       <div id="pubProg" class="dim small" style="margin-top:8px"></div>
     ` : `<div class="note warn">Para publicar el portal, primero conecta el repositorio de GitHub en <a href="#" data-act="go" data-tab="ajustes">Ajustes</a>.</div>`}
   </div>
   <div class="card">
     <h2>Tarjetas e impresión</h2>
-    <p class="dim small">Imprime en tamaño carta. Las tarjetas (con QR) y la hoja de PINs se imprimen por separado para entregarlos por vías distintas.</p>
+    <p class="dim small">Imprime en tamaño carta. ${S.config.portalPin ? 'Las tarjetas (con QR) y la hoja de PINs se imprimen por separado para entregarlos por vías distintas.' : 'Cada tarjeta es personal: quien tenga el QR puede ver ese estado de cuenta.'}</p>
     <div class="btn-row">
       <button class="btn" data-act="print-tarjetas" ${ok ? '' : 'disabled'}>🪪 Imprimir tarjetas (${live('socios').filter(socioActivo).length})</button>
-      <button class="btn" data-act="print-pins">🔢 Imprimir hoja de PINs</button>
+      ${S.config.portalPin ? '<button class="btn" data-act="print-pins">🔢 Imprimir hoja de PINs</button>' : ''}
       <button class="btn" data-act="print-estados">🖨️ Estados de cuenta de todos</button>
     </div>
     <p class="dim tiny" style="margin-top:10px">Para una sola tarjeta, abre al socio y toca "Tarjeta y PIN".</p>
@@ -2494,6 +2495,8 @@ VIEWS.portal = function(){
 VIEWS.portal.mount = function(v){
   const a = $('#pAuto', v);
   if(a) a.onchange = ()=>{ setConfig({ portalAuto: a.checked }, { noRender: true }); if(a.checked) schedulePortal(); };
+  const pp = $('#pPin', v);
+  if(pp) pp.onchange = ()=>{ setConfig({ portalPin: pp.checked }); toast(pp.checked ? 'Ahora el portal pedirá PIN. Publica el portal para aplicarlo.' : 'Listo: el portal ya no pedirá PIN. Publica el portal para aplicarlo.'); if(S.config.portalAuto) schedulePortal(); };
 };
 ACT['publicar'] = async el=>{
   el.disabled = true;
@@ -2515,7 +2518,7 @@ function printHtml(html){
 function printTarjetas(socios, uno){
   ensureCredenciales();
   const sind = S.config.nombre || 'Sindicato';
-  printHtml(`<div class="p-cards">${socios.map(s=> `<div class="p-card"><div class="q">${qrSvg(socioPortalUrl(s))}</div><div><div class="s">${esc(sind)}</div><div class="n">${esc(s.nombre)}</div>${s.rut ? `<div class="s">${esc(formatRut(s.rut))}</div>` : ''}<div class="s">Escanea el código con la cámara de tu celular e ingresa tu PIN para ver tus cuotas pagadas y tu deuda.</div></div></div>`).join('')}</div>${uno ? `<p style="margin-top:8mm;font-size:10pt">PIN de ${esc(socios[0].nombre)}: <b style="font-size:14pt;letter-spacing:2pt">${esc(socios[0].pin)}</b> (recortar y entregar por separado)</p>` : ''}`);
+  printHtml(`<div class="p-cards">${socios.map(s=> `<div class="p-card"><div class="q">${qrSvg(socioPortalUrl(s))}</div><div><div class="s">${esc(sind)}</div><div class="n">${esc(s.nombre)}</div>${s.rut ? `<div class="s">${esc(formatRut(s.rut))}</div>` : ''}<div class="s">Escanea el código con la cámara de tu celular ${S.config.portalPin ? ' e ingresa tu PIN' : ''} para ver tus cuotas pagadas y tu deuda.</div></div></div>`).join('')}</div>${uno && S.config.portalPin ? `<p style="margin-top:8mm;font-size:10pt">PIN de ${esc(socios[0].nombre)}: <b style="font-size:14pt;letter-spacing:2pt">${esc(socios[0].pin)}</b> (recortar y entregar por separado)</p>` : ''}`);
 }
 ACT['print-tarjetas'] = ()=> printTarjetas(sociosOrdenados().filter(socioActivo));
 ACT['print-pins'] = ()=>{
@@ -2891,7 +2894,7 @@ function correoDatos(s){
   const detalle = pend.length ? 'Detalle de lo pendiente:\n' + pend.map(it=> `  • ${it.concepto}: ${clp(it.monto - it.pagado)}`).join('\n') + `\n  Total: ${clp(c.deuda)}` : '';
   let plan = '';
   if(pl){ const r = planResumen(pl); plan = `Plan de pago: llevas ${r.pagadas} de ${r.n} cuotas descontadas; saldo del plan ${clp(r.saldo)}.\n`; }
-  const enlace = (connected() && s.token && portalBaseUrl()) ? `Puedes revisar tu estado de cuenta en cualquier momento aquí (necesitas tu PIN):\n${socioPortalUrl(s)}\n` : '';
+  const enlace = (connected() && s.token && portalBaseUrl()) ? `Puedes revisar tu estado de cuenta en cualquier momento aquí${S.config.portalPin ? ' (necesitas tu PIN)' : ''}:\n${socioPortalUrl(s)}\n` : '';
   const ult = c.ultimoPago ? `Último pago registrado: ${fdate(c.ultimoPago.fecha)} por ${clp(c.ultimoPago.monto)}.` : '';
   return { c, pend, resumen, detalle, plan, enlace, ult };
 }

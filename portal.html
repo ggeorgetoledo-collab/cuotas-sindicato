@@ -226,11 +226,11 @@
     ${p.plan ? `<div class="card"><h2>🤝 Mi plan de pago</h2><div class="row"><div class="main"><div class="title">${p.plan.p} de ${p.plan.n} cuotas descontadas</div><div class="sub">Cuotas de ${clp(p.plan.mo)}${p.plan.inc ? ' + cuota mensual' : ''}, por descuento por planilla · termina en ${esc(mesLabel(p.plan.fin))}</div></div><div class="val">${clp(p.plan.saldo)}</div></div><div class="dim small">El monto de la derecha es lo que falta del plan. Próximo descuento: <b>${clp(p.plan.prox)}</b>.</div></div>` : ''}
     ${desc.length ? `<div class="card"><h2>Descuentos</h2>${desc.map(d=> `<div class="row"><div class="main"><div class="title">${esc(d.c)}</div><div class="sub">${esc(mesLabel(d.m))}</div></div><div class="val ok">−${clp(d.mo)}</div></div>`).join('')}</div>` : ''}
     <div class="note">Información actualizada el ${esc(fdatetime(p.generado || session.data.generado))}. Los pagos recientes pueden tardar en aparecer.<br>Los pagos se imputan primero a la deuda más antigua. Ante cualquier duda, consulta con la directiva.</div>
-    <div class="actions"><button class="btn sec" id="lock">🔒 Salir${lsGet('cp_pin::' + session.token) ? ' y olvidar PIN' : ''}</button></div>`;
+    ${session.sinPin ? '' : `<div class="actions"><button class="btn sec" id="lock">🔒 Salir${lsGet('cp_pin::' + session.token) ? ' y olvidar PIN' : ''}</button></div>`}`;
     const yp = document.getElementById('yPrev'), yn = document.getElementById('yNext');
     yp.onclick = ()=>{ session.year--; render(); };
     yn.onclick = ()=>{ session.year++; render(); };
-    document.getElementById('lock').onclick = ()=>{ lsSet('cp_pin::' + session.token, null); session.payload = null; askPin(''); };
+    const lk = document.getElementById('lock'); if(lk) lk.onclick = ()=>{ lsSet('cp_pin::' + session.token, null); session.payload = null; askPin(''); };
   }
   function list(items, fn, visible){
     const first = items.slice(0, visible).map(fn).join('');
@@ -256,6 +256,7 @@
     const id = hex(await sha('cs-id:' + token)).slice(0, 32);
     session.entry = session.data.entries && session.data.entries[id];
     if(!session.entry){ message('🤔', 'No encontramos tu tarjeta', 'Puede que tu tarjeta sea nueva y aún no esté publicada, o que haya sido reemplazada. Consulta con la directiva.'); return; }
+    if(await open('')){ session.sinPin = true; render(); return; }
     const saved = lsGet('cp_pin::' + token);
     if(saved && await open(saved)){ render(); return; }
     if(saved) lsSet('cp_pin::' + token, null);
