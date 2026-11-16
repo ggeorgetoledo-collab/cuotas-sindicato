@@ -2035,28 +2035,34 @@ async function nominaWord(nm){
     const b = { style: BorderStyle.SINGLE, size: 4, color: '000000' };
     const borders = { top: b, bottom: b, left: b, right: b };
     // ancho útil carta horizontal con márgenes de 1,5 cm ≈ 15000 dxa
-    const W = [600, 4300, 1800, 2000, 2300, 4000];
+    const fe = nm.creado ? new Date(nm.creado) : new Date();
+    const mesEmi = MESES[fe.getMonth()] + ' ' + fe.getFullYear();
+    const W = [700, 5300, 2200, 2700, 4100];
     const cell = (content, i, o)=> new TableCell(Object.assign({ borders, width: { size: W[i], type: WidthType.DXA }, verticalAlign: VerticalAlign.CENTER, margins: { top: 60, bottom: 60, left: 100, right: 100 }, children: [p(content, { alignment: (o && o.align) || AlignmentType.LEFT })] }, (o && o.cell) || {}));
     const R = AlignmentType.RIGHT, C = AlignmentType.CENTER;
     const head = new TableRow({ tableHeader: true, children: [
       cell(t('N°', { bold: true }), 0, { align: C }), cell(t('Nombre', { bold: true }), 1), cell(t('RUT', { bold: true }), 2),
-      cell(t('Deuda vencida', { bold: true }), 3, { align: R }), cell(t('Abono ' + mesLabel(mes), { bold: true }), 4, { align: R }), cell(t('Firma', { bold: true }), 5, { align: C }) ] });
+      cell(t('Abono ' + mesEmi, { bold: true }), 3, { align: R }), cell(t('Firma', { bold: true }), 4, { align: C }) ] });
     const rows = filas.map((r, i)=> new TableRow({ height: { value: 620, rule: HeightRule.ATLEAST }, children: [
       cell(t(i + 1), 0, { align: C }), cell(t(r.s.nombre), 1), cell(t(r.s.rut ? formatRut(r.s.rut) : ''), 2),
-      cell(t(clp(r.deuda)), 3, { align: R }), cell(t(clp(r.a.monto)), 4, { align: R }), cell(t(''), 5) ] }));
+      cell(t(clp(r.a.monto)), 3, { align: R }), cell(t(''), 4) ] }));
     const total = filas.reduce((a, r)=> a + r.a.monto, 0);
-    const tot = new TableRow({ children: [ cell(t(''), 0), cell(t('Total', { bold: true }), 1), cell(t(''), 2), cell(t(clp(filas.reduce((a, r)=> a + r.deuda, 0)), { bold: true }), 3, { align: R }), cell(t(clp(total), { bold: true }), 4, { align: R }), cell(t(''), 5) ] });
+    const tot = new TableRow({ children: [ cell(t(''), 0), cell(t('Total', { bold: true }), 1), cell(t(''), 2), cell(t(clp(total), { bold: true }), 3, { align: R }), cell(t(''), 4) ] });
     const doc = new Document({
       styles: { default: { document: { run: { font: F, size: SZ } } } },
       sections: [{
         properties: { page: { size: { width: 12240, height: 15840, orientation: PageOrientation.LANDSCAPE }, margin: { top: 850, bottom: 850, left: 850, right: 850 } } },
         children: [
           p(t(S.config.nombre || 'Sindicato', { bold: true })),
-          p(t('Autorización de descuento por planilla: abono a cuotas sindicales adeudadas · ' + mesLabelCap(mes), { bold: true }), { spacing: { after: 120 } }),
-          p(t('Quienes firman autorizan que se descuente de su remuneración del mes de ' + mesLabel(mes) + ' el monto indicado en la columna "Abono", como pago de cuotas sindicales adeudadas. Este monto es adicional a la cuota sindical mensual.'), { spacing: { after: 200 } }),
+          p(t('Autorización de descuento por planilla: abono a cuotas sindicales adeudadas · ' + mesEmi.charAt(0).toUpperCase() + mesEmi.slice(1), { bold: true }), { spacing: { after: 120 } }),
+          p(t('Al firmar este documento, autorizo que se descuente de mi liquidación de sueldo del mes de ' + mesEmi + ' el monto indicado en la columna "Abono", destinado al pago de cuotas sindicales adeudadas a ' + (S.config.nombre || 'el sindicato') + '. Este monto es adicional a la cuota sindical mensual y se descuenta por única vez.'), { spacing: { after: 200 } }),
           new Table({ width: { size: W.reduce((a, x)=> a + x, 0), type: WidthType.DXA }, columnWidths: W, rows: [head].concat(rows, [tot]) }),
-          p(t(''), { spacing: { before: 400 } }),
-          p(t('Fecha: ____ / ____ / ________        Firma tesorería: ______________________________')),
+          p(t(''), { spacing: { before: 500 } }),
+          p(t('Firma director(a) del sindicato: ______________________________     Nombre: ______________________________     Fecha: ____ / ____ / ________')),
+          p(t(''), { spacing: { before: 600 } }),
+          p(t('Recepción por Administración', { bold: true }), { spacing: { after: 160 } }),
+          p(t('Nombre: ______________________________     Firma: ______________________________     Fecha de recepción: ____ / ____ / ________')),
+          p(t('Timbre:'), { spacing: { before: 240 } }),
         ],
       }],
     });
