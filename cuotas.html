@@ -3118,7 +3118,13 @@ function correoCardHtml(){
       <label class="f">Enviar a<select id="ccQuien"><option value="1" ${c.soloDeuda ? 'selected' : ''}>Solo socios con deuda</option><option value="0" ${!c.soloDeuda ? 'selected' : ''}>Todos los socios</option></select></label>
     </div>
     <label class="check" style="margin-top:8px"><input type="checkbox" id="ccAbrir" ${c.abrirSolo ? 'checked' : ''}> Abrir la ventana de envío sola al entrar a la app ese día</label>
-    <div class="btn-row" style="margin-top:10px"><button class="btn primary sm" data-act="correos">✉️ Enviar ahora</button><button class="btn sm" data-act="pegar-correos">📋 Pegar correos</button></div>
+    <h3>Texto del correo</h3>
+    <label class="f">Asunto<input id="ccAs" value="${esc(c.asunto)}"></label>
+    <label class="f" style="margin-top:8px">Mensaje<textarea id="ccCu" style="min-height:260px">${esc(c.cuerpo)}</textarea></label>
+    <p class="dim tiny">Se reemplazan solos: {nombre} {primer_nombre} {deuda} {meses} {resumen} {detalle} {plan} {enlace} {cuota} {mes} {fecha} {sindicato}.</p>
+    <div class="btn-row"><button class="btn sm primary" id="ccGuardar">Guardar texto</button><button class="btn sm" id="ccPrev">👁️ Vista previa</button><button class="btn sm" id="ccReset">Restaurar texto original</button></div>
+    <div id="ccPrevBox"></div>
+    <div class="btn-row" style="margin-top:12px"><button class="btn sm" data-act="correos">✉️ Enviar ahora</button><button class="btn sm" data-act="pegar-correos">📋 Pegar correos</button></div>
   </div>`;
 }
 const _vAj = VIEWS.ajustes, _mAj = VIEWS.ajustes.mount;
@@ -3129,6 +3135,16 @@ VIEWS.ajustes.mount = function(v){
   if(d) d.onchange = ()=> setConfig({ correoDia: Number(d.value) || 0 }, { noRender: true });
   if(q) q.onchange = ()=> setConfig({ correoSoloDeuda: q.value === '1' }, { noRender: true });
   if(a) a.onchange = ()=> setConfig({ correoAbrirSolo: a.checked }, { noRender: true });
+  const as = $('#ccAs', v), cu = $('#ccCu', v);
+  if(!as) return;
+  $('#ccGuardar', v).onclick = ()=>{ setConfig({ correoAsunto: as.value.trim() || CORREO_ASUNTO_DEF, correoCuerpo: cu.value.trim() ? cu.value : CORREO_CUERPO_DEF }, { noRender: true }); toast('✓ Texto del correo guardado', 'ok'); };
+  $('#ccReset', v).onclick = async ()=>{ if(!await confirmar('¿Volver al texto original del correo?', 'Restaurar')) return; as.value = CORREO_ASUNTO_DEF; cu.value = CORREO_CUERPO_DEF; setConfig({ correoAsunto: '', correoCuerpo: '' }, { noRender: true }); $('#ccPrevBox', v).innerHTML = ''; };
+  $('#ccPrev', v).onclick = ()=>{
+    const s0 = sociosOrdenados().filter(x=> !socioBaja(x)).sort((a, b)=> cuentaSocio(b).deuda - cuentaSocio(a).deuda)[0];
+    if(!s0){ toast('Agrega socios para ver la vista previa.'); return; }
+    const d = correoDatos(s0);
+    $('#ccPrevBox', v).innerHTML = `<div class="note" style="white-space:pre-wrap;color:var(--text);margin-top:10px"><span class="dim small">Ejemplo con ${esc(s0.nombre)}</span>\n<b>${esc(correoRender(as.value, s0, d))}</b>\n\n${esc(correoRender(cu.value, s0, d))}</div>`;
+  };
 };
 
 /* =====================================================================
