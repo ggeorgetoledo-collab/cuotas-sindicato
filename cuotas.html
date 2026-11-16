@@ -281,6 +281,7 @@ body.en-menu #tabs{ display:none; }
     <button type="button" data-tab="cuotas" data-mod="fin">📅 Cobros</button>
     <button type="button" data-tab="gastos" data-mod="fin">🧾 Gastos</button>
     <button type="button" data-tab="ingresos" data-mod="fin">📈 Ingresos</button>
+    <button type="button" data-tab="aprobar" data-mod="fin" hidden>⏳ Por aprobar</button>
     <button type="button" data-tab="actas" data-mod="actas">📄 Actas</button>
     <button type="button" data-tab="tareas" data-mod="actas">✅ Tareas</button>
     <button type="button" data-tab="avisos" data-mod="avisos">📢 Avisos</button>
@@ -297,7 +298,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 </script>
 <script>
-const APP_VERSION = "20261116142604";
+const APP_VERSION = "20261116143620";
 'use strict';
 /* =====================================================================
    CUOTAS SINDICALES — administración de cuotas y deuda de socios
@@ -352,7 +353,7 @@ function rutValido(r){
 /* ---------- Estado ----------
    Cada registro lleva id, u (última modificación, ms) y del (borrado lógico).
    Así los cambios de varios dirigentes se combinan registro por registro sin pisarse. */
-const COLS = ['tarifas', 'socios', 'pagos', 'cobros', 'ajustes', 'planes', 'autoriz', 'acuerdos', 'nominas', 'gastos', 'ingresos', 'correos', 'actas', 'tareas', 'avisos'];
+const COLS = ['tarifas', 'socios', 'pagos', 'cobros', 'ajustes', 'planes', 'autoriz', 'acuerdos', 'nominas', 'gastos', 'ingresos', 'correos', 'actas', 'tareas', 'avisos', 'propuestas'];
 const MEDIOS = ['Efectivo', 'Transferencia', 'Descuento por planilla', 'Depósito', 'Otro'];
 function emptyState(){
   const e = { v: 1, config: { nombre: '', diaVencimiento: 10, mesInicioDefault: curYm(), portalAuto: true, u: 0 } };
@@ -4124,6 +4125,335 @@ function avisosPortal(){
   const hoy = todayISO();
   return live('avisos').filter(a=> a.publico && (!a.fecha || a.fecha >= hoy)).map(a=> ({ id: a.id, ti: a.tipo, t: a.titulo, f: a.fecha || '', h: a.hora || '', l: a.lugar || '', x: a.texto || '', cr: a.creado || '' }));
 }
+
+/* =====================================================================
+   DIRECTIVA CON CUENTAS DE GOOGLE + APROBACIÓN DEL TESORERO
+   - Cada dirigente se identifica con su cuenta de Google (correo verificado
+     por Google). Solo los correos de la lista pueden hacer cambios.
+   - Actas, tareas y avisos: cualquier dirigente edita libremente.
+   - Finanzas (socios, pagos, cobros, planes, gastos, ingresos, ajustes…):
+     los cambios de otros dirigentes quedan "por aprobar" y no cuentan
+     hasta que el tesorero los aprueba.
+   - Ajustes de la directiva y del bloqueo: solo el tesorero.
+   ===================================================================== */
+const FIN_COLS = ['tarifas', 'socios', 'pagos', 'cobros', 'ajustes', 'planes', 'autoriz', 'acuerdos', 'nominas', 'gastos', 'ingresos'];
+const CFG_PROTEGIDA = ['directiva', 'bloqueo', 'diaVencimiento', 'mesInicioDefault'];
+const ID_SCOPE = 'openid email profile';
+const ID_DIAS = 30;
+['id-login', 'id-logout', 'prop-ver', 'tf-prop', 'abrir-mod'].forEach(a=> ACT_LIBRES.add(a));
+
+/* ---------- Identidad ---------- */
+function idTok(){ try{ return JSON.parse(lsGet('cs_id', 'null') || 'null'); }catch(e){ return null; } }
+function idEmail(){ const t = idTok(); return t && t.email && Date.now() < t.hasta ? t.email : ''; }
+function dirCfg(cfg){ const d = (cfg || S.config).directiva; return d && d.on && d.tesorero ? d : null; }
+function dirGuardada(){ try{ const p = JSON.parse(lsGet('cs_state', 'null') || 'null'); return dirCfg((p && p.config) || {}); }catch(e){ return null; } }
+function dirOn(){ return !!dirCfg(); }
+function miembroDe(email, d){ d = d || dirCfg(); email = String(email || '').toLowerCase(); if(!d || !email) return null; if(email === d.tesorero) return Object.assign({ email, cargo: 'Tesorero' }, (d.miembros || []).find(m=> m.email === email) || {}, { tesorero: true }); return (d.miembros || []).find(m=> m.email === email) || null; }
+function esTesorero(){ const d = dirGuardada() || dirCfg(); return !d || idEmail() === d.tesorero; }
+function soyMiembro(){ return !!miembroDe(idEmail(), dirGuardada() || dirCfg()); }
+function nombreDe(m){ return m ? (m.nombre || m.email) + (m.cargo ? ' (' + m.cargo + ')' : '') : ''; }
+
+function idLogin(){
+  if(!(window.google && google.accounts && google.accounts.oauth2)){ gdLoadGis().catch(()=>{}); return Promise.reject(new Error('Cargando Google… espera 2 segundos y toca de nuevo.')); }
+  return new Promise((resolve, reject)=>{
+    const prev = idTok();
+    google.accounts.oauth2.initTokenClient({
+      client_id: gdClientId(), scope: ID_SCOPE,
+      callback: async resp=>{
+        if(resp.error){ reject(new Error(resp.error_description || resp.error)); return; }
+        try{
+          const r = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers: { Authorization: 'Bearer ' + resp.access_token } });
+          const u = await r.json();
+          if(!u.email || u.email_verified === false) throw new Error('Google no entregó un correo verificado.');
+          lsSet('cs_id', JSON.stringify({ email: u.email.toLowerCase(), name: u.name || '', hasta: Date.now() + ID_DIAS * 86400000 }));
+          resolve(u.email.toLowerCase());
+        }catch(e){ reject(e); }
+      },
+      error_callback: err=> reject(new Error(err && err.type === 'popup_closed' ? 'Se cerró la ventana de Google.' : 'No se pudo abrir la ventana de Google.')),
+    }).requestAccessToken({ prompt: prev && prev.email ? '' : 'select_account', login_hint: prev && prev.email ? prev.email : undefined });
+  });
+}
+ACT['id-login'] = ()=> idLogin().then(e=>{ const m = miembroDe(e, dirGuardada() || dirCfg()); toast(m ? '✓ Sesión iniciada: ' + nombreDe(m) : `La cuenta ${e} no está en la directiva: solo puedes mirar.`, m ? 'ok' : 'bad', 8000); renderView(); refreshOpenModal(); }).catch(e=> toast('⚠ ' + e.message, 'bad'));
+ACT['id-logout'] = ()=>{ lsSet('cs_id', null); renderView(); };
+setTimeout(()=>{ if(dirOn() && typeof gdLoadGis === 'function') gdLoadGis().catch(()=>{}); }, 1500);
+
+/* ---------- Permisos: se integran con el bloqueo existente ---------- */
+const _puedeCambiarD = puedeCambiar;
+puedeCambiar = function(){
+  const d = dirGuardada(); if(!d) return _puedeCambiarD();
+  const e = idEmail(); if(!e || !miembroDe(e, d)) return false;
+  if(e === d.tesorero) return !lockGuardado() || desbloqueado();
+  return true;
+};
+const _abrirDesbloqueoD = abrirDesbloqueo;
+abrirDesbloqueo = function(despues){
+  const d = dirGuardada();
+  if(!d || (idEmail() === d.tesorero)) return _abrirDesbloqueoD(despues);
+  if(modalStack.some(m=> m.el._idm)) return;
+  const e = idEmail();
+  openModal({
+    title: ()=> '👤 Identifícate para hacer cambios',
+    body: ()=> e && !miembroDe(e, d)
+      ? `<div class="note bad small">La cuenta <b>${esc(e)}</b> no está en la lista de la directiva, así que solo puedes mirar. Si eres dirigente, pide al tesorero que agregue tu correo de Google.</div>`
+      : `<p class="small">Inicia sesión con tu cuenta de Google. Tu nombre quedará registrado en cada cambio que hagas.</p><p class="dim tiny">Los cambios en Finanzas quedan pendientes hasta que el tesorero los apruebe.</p>`,
+    foot: ()=> `<button class="btn" data-act="close-modal">Cancelar</button><button class="btn primary" id="idmGo">${e && !miembroDe(e, d) ? 'Usar otra cuenta' : 'Iniciar sesión con Google'}</button>`,
+    onMount: el=>{
+      el._idm = true;
+      $('#idmGo', el).onclick = ()=>{
+        if(e && !miembroDe(e, d)) lsSet('cs_id', null);
+        idLogin().then(em=>{
+          closeModal();
+          if(!miembroDe(em, d)){ toast(`La cuenta ${em} no está en la directiva.`, 'bad', 8000); renderView(); return; }
+          if(em === d.tesorero && lockGuardado() && !desbloqueado()){ renderView(); _abrirDesbloqueoD(despues); return; }
+          toast('✓ Hola, ' + nombreDe(miembroDe(em, d)), 'ok'); renderView(); if(despues) setTimeout(despues, 50);
+        }).catch(err=> toast('⚠ ' + err.message, 'bad'));
+      };
+    },
+  });
+};
+const _yoD = yo;
+yo = function(){ const d = dirGuardada() || dirCfg(); if(d){ const m = miembroDe(idEmail(), d); if(m) return nombreDe(m); } return _yoD(); };
+const _lockCardD = lockCardHtml;
+lockCardHtml = function(){ return dirOn() && !esTesorero() ? '' : _lockCardD(); };
+const _lkChipD = lkChip;
+lkChip = function(){
+  if(dirOn() && !esTesorero()){ const el = $('#lkChip'); if(el) el.remove(); }
+  else _lkChipD();
+  idChip();
+};
+function idChip(){
+  let el = $('#idChip');
+  if(!dirOn()){ if(el) el.remove(); return; }
+  if(!el){ el = document.createElement('button'); el.type = 'button'; el.id = 'idChip'; el.className = 'sync-chip'; const sc = $('#lkChip') || $('#syncChip'); sc.parentNode.insertBefore(el, sc); }
+  const m = miembroDe(idEmail());
+  if(m){ el.dataset.act = 'go'; el.dataset.tab = 'ajustes'; el.textContent = '👤 ' + String(m.nombre || m.email).split(/[ @]/)[0]; el.className = 'sync-chip ok'; el.title = m.email; }
+  else { el.dataset.act = 'id-login'; el.textContent = idEmail() ? '👤 Sin permiso' : '👤 Iniciar sesión'; el.className = 'sync-chip'; el.title = idEmail() || ''; }
+}
+
+/* ---------- Descripción de cambios ---------- */
+const COL_TXT = { tarifas: 'Valor de cuota', socios: 'Socio', pagos: 'Pago', cobros: 'Cuota extraordinaria', ajustes: 'Ajuste / condonación', planes: 'Plan de pago', autoriz: 'Descuento de plan', acuerdos: 'Abono acordado', nominas: 'Planilla de abonos', gastos: 'Gasto', ingresos: 'Ingreso' };
+const CAMPOS_OCULTOS = new Set(['u', 'token', 'pin', 'creado', 'por', 'editadoPor', 'del', 'filas', 'id']);
+const CAMPO_TXT = { nombre: 'nombre', rut: 'RUT', email: 'correo', telefono: 'teléfono', mesInicio: 'socio desde', mesTermino: 'último mes', suspDesde: 'suspendido desde', suspHasta: 'suspendido hasta', notas: 'notas', monto: 'monto', fecha: 'fecha', medio: 'medio', obs: 'observación', mes: 'mes', concepto: 'concepto', tipo: 'tipo', desde: 'rige desde', item: 'ítem', categoria: 'categoría', detalle: 'detalle', estado: 'estado', cuotas: 'N° de cuotas', montoCuota: 'monto por cuota', inicio: 'inicio', anulado: 'anulado', socioId: 'socio' };
+function socioNomD(id){ const s = S.socios.find(x=> x.id === id); return s ? s.nombre : ''; }
+function valTxt(k, v){
+  if(v === undefined || v === null || v === '') return '—';
+  if(k === 'socioId') return socioNomD(v) || v;
+  if(/^(monto|montoCuota)$/.test(k) && typeof v === 'number') return clp(v);
+  if(/^(mes|mesInicio|mesTermino|suspDesde|suspHasta|desde|inicio)$/.test(k) && /^\d{4}-\d{2}$/.test(v)) return mesLabel(v, true);
+  if(k === 'fecha' && /^\d{4}-\d{2}-\d{2}/.test(v)) return fdate(v);
+  if(Array.isArray(v)) return v.length + ' elemento(s)';
+  if(typeof v === 'object') return '…';
+  if(typeof v === 'boolean') return v ? 'sí' : 'no';
+  return String(v).slice(0, 80);
+}
+function descRec(col, r){
+  if(!r) return '';
+  switch(col){
+    case 'socios': return r.nombre;
+    case 'pagos': return `${socioNomD(r.socioId)} · ${clp(r.monto)} · ${fdate(r.fecha)}`;
+    case 'cobros': return `${r.concepto} · ${clp(r.monto)} · ${mesLabel(r.mes, true)}`;
+    case 'tarifas': return `${clp(r.monto)} desde ${mesLabel(r.desde, true)}`;
+    case 'ajustes': return `${socioNomD(r.socioId)} · ${r.tipo}${r.monto ? ' ' + clp(r.monto) : ''}${r.mes ? ' · ' + mesLabel(r.mes, true) : ''}`;
+    case 'gastos': case 'ingresos': return `${r.item || r.concepto || ''} · ${clp(r.monto)} · ${fdate(r.fecha)}`;
+    case 'planes': return `${socioNomD(r.socioId)} · ${r.cuotas || ''} cuotas`;
+    case 'acuerdos': return `${socioNomD(r.socioId)} · ${clp(r.monto)}`;
+    case 'autoriz': { const p = S.planes.find(x=> x.id === r.planId); return `${p ? socioNomD(p.socioId) : ''} · ${mesLabel(r.mes, true)} · ${r.estado || ''}`; }
+    case 'nominas': return `Planilla ${mesLabel(r.mes, true)}`;
+    default: return '';
+  }
+}
+function diffCampos(a, b){
+  const out = [];
+  new Set(Object.keys(a || {}).concat(Object.keys(b || {}))).forEach(k=>{
+    if(CAMPOS_OCULTOS.has(k)) return;
+    const x = a ? a[k] : undefined, y = b ? b[k] : undefined;
+    if(JSON.stringify(x === undefined ? null : x) === JSON.stringify(y === undefined ? null : y)) return;
+    if((x === undefined || x === '' || x === null) && (y === undefined || y === '' || y === null)) return;
+    out.push([CAMPO_TXT[k] || k, valTxt(k, x), valTxt(k, y)]);
+  });
+  return out;
+}
+function itemAccion(it){ return !it.antes || it.antes.del ? (it.despues.del ? '' : 'Nuevo') : it.despues.del ? 'Eliminar' : 'Modificar'; }
+function itemTxt(it){ const a = itemAccion(it); return `${a} ${(COL_TXT[it.col] || it.col).toLowerCase()}: ${descRec(it.col, it.despues.del ? it.antes : it.despues)}`; }
+
+/* ---------- Interceptar cambios de finanzas de otros dirigentes ---------- */
+const _changedD = changed;
+changed = function(opts){
+  const d = dirGuardada();
+  if(!d || !puedeCambiar() || idEmail() === d.tesorero) return _changedD(opts);
+  let prev; try{ prev = normalizeState(JSON.parse(lsGet('cs_state', 'null') || 'null')); }catch(e){ return _changedD(opts); }
+  const items = [];
+  FIN_COLS.forEach(col=>{
+    const pm = new Map(prev[col].map(x=> [x.id, x]));
+    for(let i = S[col].length - 1; i >= 0; i--){
+      const r = S[col][i], a = pm.get(r.id);
+      if(a && (a.u || 0) === (r.u || 0) && !!a.del === !!r.del) continue;
+      if(!a && r.del) { S[col].splice(i, 1); continue; }
+      const sig = a && !!a.del === !!r.del ? diffCampos(a, r).length : 1;
+      if(!sig) continue;   // solo cambió el token o el PIN del portal
+      items.push({ col, rid: r.id, antes: a ? JSON.parse(JSON.stringify(a)) : null, despues: JSON.parse(JSON.stringify(r)) });
+      if(a) S[col][i] = a; else S[col].splice(i, 1);
+    }
+  });
+  // configuración protegida
+  let cfgBloq = false;
+  CFG_PROTEGIDA.forEach(k=>{ if(JSON.stringify(S.config[k]) !== JSON.stringify(prev.config[k])){ S.config[k] = prev.config[k]; cfgBloq = true; } });
+  // las propuestas solo las resuelve el tesorero
+  const pp = new Map(prev.propuestas.map(x=> [x.id, x]));
+  S.propuestas.forEach((p, i)=>{ const a = pp.get(p.id); if(a && (a.estado !== p.estado || p.del !== a.del)) S.propuestas[i] = a; });
+  if(items.length){
+    const e = idEmail(), t = Date.now();
+    let lote = S.propuestas.find(p=> !p.del && p.estado === 'pendiente' && p.quien === e && t - (p.t0 || 0) < 8000);
+    if(lote){
+      items.forEach(it=>{ const j = lote.items.findIndex(x=> x.col === it.col && x.rid === it.rid); if(j >= 0) lote.items[j].despues = it.despues; else lote.items.push(it); });
+      lote.u = now();
+    } else {
+      lote = { id: uid(), quien: e, nombre: yo(), t: new Date().toISOString(), t0: t, estado: 'pendiente', items, u: now() };
+      S.propuestas.push(lote);
+    }
+    toast(`⏳ Enviado al tesorero para aprobación (${lote.items.length} cambio${lote.items.length === 1 ? '' : 's'}). Mientras tanto no cuenta en la deuda ni en la caja.`, 'ok', 9000);
+  }
+  if(cfgBloq) toast('Ese ajuste solo lo puede cambiar el tesorero.', 'bad', 7000);
+  _changedD(opts);
+  if(items.length || cfgBloq){ const y = window.scrollY; renderView(); refreshOpenModal(); window.scrollTo(0, y); }
+};
+const _borrarTodoD = ACT['borrar-todo'];
+ACT['borrar-todo'] = async el=>{ if(dirOn() && !esTesorero()){ toast('Solo el tesorero puede borrar los datos.', 'bad'); return; } await _borrarTodoD(el); };
+
+/* ---------- Aprobar / rechazar ---------- */
+function propsPend(){ return live('propuestas').filter(p=> p.estado === 'pendiente'); }
+function aplicarItem(it){
+  const i = S[it.col].findIndex(x=> x.id === it.rid);
+  const cur = i >= 0 ? S[it.col][i] : null;
+  if(!it.antes && it.despues.del) return false;
+  const rec = JSON.parse(JSON.stringify(it.despues)); rec.u = now();
+  if(cur) S[it.col][i] = rec; else S[it.col].push(rec);
+  return !!(cur && it.antes && (cur.u || 0) !== (it.antes.u || 0));
+}
+function resolver(ids, estado, motivo){
+  if(!esTesorero()){ toast('Solo el tesorero puede aprobar o rechazar.', 'bad'); return; }
+  let conflictos = 0, n = 0;
+  ids.forEach(id=>{
+    const p = S.propuestas.find(x=> x.id === id); if(!p || p.estado !== 'pendiente') return;
+    if(estado === 'aprobada') p.items.forEach(it=>{ if(aplicarItem(it)) conflictos++; });
+    p.estado = estado; p.motivo = motivo || ''; p.resolvio = yo(); p.tr = new Date().toISOString(); p.u = now(); n++;
+  });
+  changed();
+  toast(estado === 'aprobada' ? `✓ ${n} aprobado(s)` + (conflictos ? ` · ${conflictos} registro(s) habían cambiado entre medio; quedó la versión propuesta` : '') : `✕ ${n} rechazado(s)`, estado === 'aprobada' ? 'ok' : '', 8000);
+  if(S.config.portalAuto && estado === 'aprobada') schedulePortal();
+}
+ACT['prop-aprobar'] = el=> resolver([el.dataset.id], 'aprobada');
+ACT['prop-todo'] = async ()=>{ const ps = propsPend(); if(!ps.length) return; if(!await confirmar(`¿Aprobar los ${ps.length} cambios pendientes?`, 'Aprobar todos')) return; resolver(ps.map(p=> p.id), 'aprobada'); };
+ACT['prop-rechazar'] = el=>{
+  const id = el.dataset.id;
+  openModal({ title: ()=> 'Rechazar cambio', body: ()=> `<label class="f">Motivo (opcional, lo verá quien hizo el cambio)<input id="prM" placeholder="Ej: el monto no coincide con la transferencia"></label>`,
+    foot: ()=> `<button class="btn" data-act="close-modal">Cancelar</button><button class="btn danger" id="prOk">Rechazar</button>`,
+    onMount: m=>{ $('#prOk', m).onclick = ()=>{ const mo = $('#prM', m).value.trim(); closeModal(); resolver([id], 'rechazada', mo); }; } });
+};
+ACT['prop-retirar'] = async el=>{
+  const p = getById('propuestas', el.dataset.id); if(!p || p.quien !== idEmail() || p.estado !== 'pendiente') return;
+  if(!await confirmar('¿Retirar esta solicitud? Los cambios no se aplicarán.', 'Retirar', true)) return;
+  const prev = JSON.parse(lsGet('cs_state', 'null') || 'null'); const i = S.propuestas.findIndex(x=> x.id === p.id);
+  S.propuestas[i] = Object.assign({}, p, { estado: 'retirada', u: now() });
+  // se guarda directo (el guardián no deja cambiar estados a los dirigentes)
+  saveLocal(); invalidate(); scheduleSync(); renderView();
+};
+
+/* ---------- Vista: Por aprobar ---------- */
+ui.propFiltro = ui.propFiltro || 'pend';
+ACT['tf-prop'] = el=>{ ui.propFiltro = el.dataset.v; renderView(); };
+function propHtml(p, tes){
+  const est = { pendiente: ['⏳ Por aprobar', 'warn'], aprobada: ['✓ Aprobado', 'ok'], rechazada: ['✕ Rechazado', 'bad'], retirada: ['Retirado', 'neutral'] }[p.estado] || ['', 'neutral'];
+  return `<div class="card" style="margin-bottom:10px"><div class="card-head" style="margin-bottom:6px"><div><b>${esc(p.nombre || p.quien)}</b> <span class="dim small">· ${esc(fdatetime(Date.parse(p.t)))}</span></div><span class="chip ${est[1]}">${est[0]}</span></div>
+    ${p.items.map(it=>{ const cs = it.antes && !it.antes.del && !it.despues.del ? diffCampos(it.antes, it.despues) : [];
+      return `<div class="row"><div class="main"><div class="title">${esc(itemTxt(it))}</div>${cs.length ? `<div class="tiny">${cs.map(c=> `${esc(c[0])}: <span class="dim" style="text-decoration:line-through">${esc(c[1])}</span> → <b>${esc(c[2])}</b>`).join(' · ')}</div>` : ''}</div></div>`; }).join('')}
+    ${p.estado !== 'pendiente' && p.resolvio ? `<div class="dim tiny" style="margin-top:6px">${p.estado === 'aprobada' ? 'Aprobado' : p.estado === 'rechazada' ? 'Rechazado' : 'Retirado'} por ${esc(p.resolvio)} el ${esc(fdatetime(Date.parse(p.tr)))}${p.motivo ? ' · Motivo: ' + esc(p.motivo) : ''}</div>` : ''}
+    ${p.estado === 'pendiente' ? `<div class="btn-row" style="margin-top:8px">${tes ? `<button class="btn primary sm" data-act="prop-aprobar" data-id="${p.id}">✓ Aprobar</button><button class="btn sm danger" data-act="prop-rechazar" data-id="${p.id}">✕ Rechazar</button>` : p.quien === idEmail() ? `<button class="btn sm" data-act="prop-retirar" data-id="${p.id}">Retirar solicitud</button>` : '<span class="dim small">Esperando al tesorero.</span>'}</div>` : ''}
+  </div>`;
+}
+VIEWS.aprobar = function(){
+  const tes = esTesorero(), all = live('propuestas').sort((a, b)=> (b.t || '').localeCompare(a.t || ''));
+  const pend = all.filter(p=> p.estado === 'pendiente');
+  const lista = ui.propFiltro === 'pend' ? pend : all.filter(p=> p.estado !== 'pendiente').slice(0, 60);
+  return `<div class="card"><div class="card-head"><h2>⏳ Cambios por aprobar</h2>${tes && pend.length > 1 ? `<button class="btn primary sm" data-act="prop-todo">✓ Aprobar todos (${pend.length})</button>` : ''}</div>
+      <p class="dim small">${tes ? 'Cambios de finanzas hechos por otros dirigentes. No cuentan en la deuda, la caja ni el portal hasta que los apruebes.' : 'Los cambios de finanzas que haces quedan aquí hasta que el tesorero los apruebe. Mientras tanto no cuentan en la deuda ni en la caja.'}</p>
+      <div class="seg"><button type="button" data-act="tf-prop" data-v="pend" class="${ui.propFiltro === 'pend' ? 'active' : ''}">Pendientes (${pend.length})</button><button type="button" data-act="tf-prop" data-v="hist" class="${ui.propFiltro === 'hist' ? 'active' : ''}">Resueltos</button></div></div>
+    ${lista.length ? lista.map(p=> propHtml(p, tes)).join('') : `<div class="card"><div class="empty">${ui.propFiltro === 'pend' ? 'No hay cambios pendientes.' : 'Aún no hay cambios resueltos.'}</div></div>`}`;
+};
+
+/* ---------- Navegación: pestaña, menú y barra de sesión ---------- */
+const _renderD = renderView;
+renderView = function(){
+  const b = document.querySelector('#tabs [data-tab="aprobar"]');
+  if(b){ const n = propsPend().length; b.textContent = '⏳ Por aprobar' + (n ? ' (' + n + ')' : ''); if(!dirOn()) b.hidden = true; }
+  if(currentTab === 'aprobar' && !dirOn()) currentTab = 'inicio';
+  _renderD();
+  if(b && !dirOn()) b.hidden = true;
+  idChip();
+  const v = $('#view');
+  if(v && dirOn() && currentTab !== 'menu'){
+    const m = miembroDe(idEmail()); let h = '';
+    if(!m) h = `<div class="note warn small" style="display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span>${idEmail() ? `La cuenta <b>${esc(idEmail())}</b> no está en la directiva: solo puedes mirar.` : '👤 Inicia sesión con tu cuenta de Google para hacer cambios.'}</span><button class="btn primary sm" data-act="id-login">${idEmail() ? 'Cambiar de cuenta' : 'Iniciar sesión'}</button></div>`;
+    else if(!m.tesorero && modDeTab(currentTab) === 'fin' && currentTab !== 'aprobar') h = `<div class="note small">Los cambios que hagas en Finanzas quedan <b>pendientes de aprobación del tesorero</b>. <a href="#" data-act="go" data-tab="aprobar">Ver mis solicitudes</a></div>`;
+    if(h){ const x = document.createElement('div'); x.innerHTML = h; v.prepend(x.firstElementChild); }
+  }
+  if(v && currentTab === 'menu' && dirOn() && esTesorero()){
+    const n = propsPend().length, k = v.querySelector('[data-mod="fin"] .hub-k');
+    if(n && k) k.innerHTML += ` · <b style="color:var(--warn)">⏳ ${n} por aprobar</b>`;
+  }
+};
+
+/* ---------- Ajustes: directiva ---------- */
+function directivaCardHtml(){
+  const d = dirCfg(), e = idEmail(), tes = esTesorero();
+  if(!d) return `<div class="card"><h2>👥 Directiva y permisos</h2>
+    <p class="dim small">Permite que el resto de la directiva use la app con su <b>cuenta de Google</b>. Podrán editar libremente <b>Actas y acuerdos</b> y <b>Avisos</b>; los cambios en <b>Finanzas</b> quedarán pendientes hasta que tú (tesorero) los apruebes. Cada cambio queda con el nombre de quien lo hizo.</p>
+    <div class="grid2"><label class="f">Tu nombre<input id="dvN" value="${esc(lsGet('cs_yo', '') || 'Gonzalo George')}"></label><label class="f">Tu cargo<input id="dvC" value="Tesorero"></label></div>
+    <div class="btn-row" style="margin-top:10px"><button class="btn primary" id="dvOn">Activar: iniciar sesión con Google como tesorero</button></div></div>`;
+  const ms = d.miembros || [];
+  return `<div class="card"><h2>👥 Directiva y permisos</h2>
+    <div class="note small">${e ? `Sesión: <b>${esc(e)}</b>${miembroDe(e) ? ' · ' + esc(nombreDe(miembroDe(e))) : ' · <b style="color:var(--bad)">sin permiso</b>'} <button class="btn ghost sm" data-act="id-logout">Cerrar sesión</button>` : `No has iniciado sesión. <button class="btn sm" data-act="id-login">Iniciar sesión con Google</button>`}</div>
+    <div class="row"><div class="main"><div class="title">${esc(nombreDe(miembroDe(d.tesorero)))} <span class="chip primary">Aprueba finanzas</span></div><div class="sub">${esc(d.tesorero)}</div></div></div>
+    ${ms.filter(m=> m.email !== d.tesorero).map(m=> `<div class="row"><div class="main"><div class="title">${esc(nombreDe(m))}</div><div class="sub">${esc(m.email)}</div></div>${tes ? `<button class="btn ghost sm" data-act="dv-quitar" data-email="${esc(m.email)}" title="Quitar">🗑️</button>` : ''}</div>`).join('') || '<div class="dim small" style="margin:6px 0">Aún no agregas a otros dirigentes.</div>'}
+    ${tes ? `<div class="grid3" style="margin-top:10px">
+      <label class="f">Nombre<input id="dvMN" placeholder="Ej: María Soto"></label>
+      <label class="f">Correo de Google<input id="dvME" type="email" placeholder="maria@gmail.com"></label>
+      <label class="f">Cargo<input id="dvMC" placeholder="Ej: Secretaria"></label></div>
+      <div class="btn-row" style="margin-top:8px"><button class="btn sm primary" data-act="dv-agregar">+ Agregar dirigente</button><button class="btn sm" data-act="invitar">✉️ Enlace de invitación</button></div>
+      <p class="dim tiny" style="margin-top:8px">Pasos para cada dirigente: 1) agrégalo aquí con su correo de Google; 2) envíale el enlace de invitación; 3) lo abre en su celular e inicia sesión con esa cuenta.</p>
+      <details class="adv"><summary>Desactivar</summary><p class="dim small">Al desactivar, la app vuelve a quedar solo con tu PIN/huella.</p><button class="btn sm danger" data-act="dv-off">Desactivar directiva</button></details>` : ''}
+  </div>`;
+}
+ACT['dv-agregar'] = ()=>{
+  const n = $('#dvMN').value.trim(), e = $('#dvME').value.trim().toLowerCase(), c = $('#dvMC').value.trim();
+  if(!emailValido(e)){ toast('Escribe un correo válido.', 'bad'); return; }
+  const d = JSON.parse(JSON.stringify(dirCfg()));
+  if(e === d.tesorero || (d.miembros || []).some(m=> m.email === e)){ toast('Ese correo ya está en la lista.', 'bad'); return; }
+  d.miembros = (d.miembros || []).concat([{ email: e, nombre: n, cargo: c }]);
+  setConfig({ directiva: d }); toast('✓ Agregado. Envíale el enlace de invitación.', 'ok');
+};
+ACT['dv-quitar'] = async el=>{
+  const d = JSON.parse(JSON.stringify(dirCfg())); const m = (d.miembros || []).find(x=> x.email === el.dataset.email); if(!m) return;
+  if(!await confirmar(`¿Quitar a ${esc(nombreDe(m))}? Ya no podrá hacer cambios.`, 'Quitar', true)) return;
+  d.miembros = d.miembros.filter(x=> x.email !== m.email); setConfig({ directiva: d });
+};
+ACT['dv-off'] = async ()=>{ if(!await confirmar('¿Desactivar la directiva? Los demás dirigentes ya no podrán hacer cambios (solo tú con tu PIN o huella).', 'Desactivar', true)) return; setConfig({ directiva: Object.assign({}, dirCfg(), { on: false }) }); };
+const _vAjD = VIEWS.ajustes, _mAjD = VIEWS.ajustes.mount;
+VIEWS.ajustes = function(){ const h = _vAjD(); const i = h.indexOf('<div class="card">', 10); return i > 0 ? h.slice(0, i) + directivaCardHtml() + h.slice(i) : directivaCardHtml() + h; };
+VIEWS.ajustes.mount = function(v){
+  if(_mAjD) _mAjD(v);
+  const on = $('#dvOn', v);
+  if(on) on.onclick = async ()=>{
+    if(!puedeCambiar()){ abrirDesbloqueo(()=> renderView()); return; }
+    const n = $('#dvN', v).value.trim(), c = $('#dvC', v).value.trim() || 'Tesorero';
+    let e; try{ e = await idLogin(); }catch(err){ toast('⚠ ' + err.message, 'bad'); return; }
+    const prevD = S.config.directiva || {};
+    const miembros = (prevD.miembros || []).filter(m=> m.email !== e).concat([{ email: e, nombre: n, cargo: c }]);
+    setConfig({ directiva: { on: true, tesorero: e, miembros } });
+    toast('✓ Directiva activada. Tú apruebas los cambios de finanzas. Ahora agrega a los dirigentes.', 'ok', 9000);
+    renderView();
+  };
+};
 
 /* =====================================================================
    GOOGLE DRIVE (sincronización con tu cuenta de Google)
