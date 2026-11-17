@@ -298,7 +298,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 
 </script>
 <script>
-const APP_VERSION = "20261117064252";
+const APP_VERSION = "20261117121601";
 'use strict';
 /* =====================================================================
    CUOTAS SINDICALES — administración de cuotas y deuda de socios
@@ -4847,7 +4847,7 @@ ACT['dr-subir'] = async ()=>{
   if(drEmail() !== drCfg().email){ toast(`Entraste con ${drEmail()}, pero la carpeta es de ${drCfg().email}.`, 'bad', 8000); return; }
   drEjecutar(true);
 };
-ACT['dr-abrir', 'dr-subir'] = ()=>{ const c = drCfg(); if(c) window.open(c.url, '_blank'); };
+ACT['dr-abrir'] = ()=>{ const c = drCfg(); if(c) window.open(c.url, '_blank'); };
 ACT['dr-quitar'] = async ()=>{ if(!await confirmar('¿Dejar de subir documentos a la carpeta? La carpeta y lo que ya se subió quedan en Drive.', 'Dejar de subir', true)) return; setConfig({ carpeta: null }); };
 
 /* ---------- Indicador y tarjeta en Ajustes ---------- */
