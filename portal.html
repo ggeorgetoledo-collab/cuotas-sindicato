@@ -124,7 +124,7 @@
     const salt = (await sha('cs-salt:' + token)).slice(0, 16);
     return crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: ITER, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
   }
-  function brand(){ return `<div class="brand"><img src="logo-128.png" alt="" style="width:32px;height:32px;border-radius:50%;background:#fff;flex:none">${esc(session.data && session.data.sindicato ? session.data.sindicato : 'Portal del socio')}</div>`; }
+  function brand(){ return `<div class="brand"><i>✊</i>${esc(session.data && session.data.sindicato ? session.data.sindicato : 'Portal del socio')}</div>`; }
   function message(icon, title, text){
     app.innerHTML = `${brand()}<div class="card msg"><div class="icon">${icon}</div><h1>${esc(title)}</h1><div class="dim">${esc(text)}</div></div>`;
   }
